@@ -293,14 +293,16 @@ fn insert_and_remove_drop_correctly() {
 fn move_into_bigger_block() {
     let mut small = Memory::<u32, 2>::new();
     let mut big = Memory::<u32, 4>::new();
-    let mut v = Vector::new(&mut small);
-    assert_eq!(v.extend_from_slice(&[1, 2]), Ok(()));
-    let moved = v.move_into(&mut big);
-    assert!(moved.is_ok());
-    if let Ok(mut v) = moved {
-        assert_eq!(v.capacity(), 4);
-        assert_eq!(v.as_slice(), &[1, 2]);
-        assert_eq!(v.push(3), Ok(()));
+    {
+        let mut v = Vector::new(&mut small);
+        assert_eq!(v.extend_from_slice(&[1, 2]), Ok(()));
+        let moved = v.move_into(&mut big);
+        assert!(moved.is_ok());
+        if let Ok(mut v) = moved {
+            assert_eq!(v.capacity(), 4);
+            assert_eq!(v.as_slice(), &[1, 2]);
+            assert_eq!(v.push(3), Ok(()));
+        }
     }
     // The old block is free to reuse.
     let v = Vector::new(&mut small);
@@ -313,9 +315,10 @@ fn move_into_too_small_block_returns_vector() {
     let mut tiny = Memory::<u32, 2>::new();
     let mut v = Vector::new(&mut memory);
     assert_eq!(v.extend_from_slice(&[1, 2, 3]), Ok(()));
-    match v.move_into(&mut tiny) {
-        Ok(_) => assert!(false, "must not fit"),
-        Err(Full(v)) => assert_eq!(v.as_slice(), &[1, 2, 3]),
+    let moved = v.move_into(&mut tiny);
+    assert!(moved.is_err());
+    if let Err(Full(v)) = moved {
+        assert_eq!(v.as_slice(), &[1, 2, 3]);
     }
 }
 
