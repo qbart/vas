@@ -28,14 +28,21 @@ but reading from it requires `unsafe`. Rules:
   it relies on.
 - `make miri` runs the test suite under Miri.
 
+## Memory
+
+`Memory<T, N>` is a zero-cost wrapper around `[MaybeUninit<T>; N]` for inline
+blocks (stack, `static`, struct field). `N` must be a compile-time constant:
+without an allocator a block's size cannot be chosen at run time. For
+run-time sizes, pass a `&mut [MaybeUninit<T>]` obtained from your own
+allocator straight to the container.
+
 ## Example
 
 ```rust
-use core::mem::MaybeUninit;
-use vas::Vector;
+use vas::{Memory, Vector};
 
-let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+let mut memory = Memory::<f32, 1024>::new();
 let mut v = Vector::new(&mut memory);
-assert!(v.push(1).is_ok());
-assert_eq!(v.as_slice(), &[1]);
+assert!(v.push(1.0).is_ok());
+assert_eq!(v.as_slice(), &[1.0]);
 ```

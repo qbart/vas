@@ -3,7 +3,9 @@
 #![no_std]
 
 mod error;
+pub mod memory;
 pub mod vector;
 
 pub use error::Full;
+pub use memory::Memory;
 pub use vector::Vector;
