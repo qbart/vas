@@ -15,6 +15,7 @@ pub mod ordered_map;
 pub mod path;
 pub mod pool;
 pub mod random;
+pub mod static_graph;
 pub mod tree;
 pub mod vector;
 
@@ -30,5 +31,6 @@ pub use ordered_map::OrderedMap;
 pub use path::PathFinder;
 pub use pool::{Handle, Pool};
 pub use random::Rng;
+pub use static_graph::StaticGraph;
 pub use tree::Tree;
 pub use vector::Vector;

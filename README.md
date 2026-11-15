@@ -29,6 +29,7 @@ Containers so far:
 - `Tree`: fixed-capacity hierarchy (parent / children / siblings)
 - `BinaryTree`: fixed-capacity binary tree
 - `Graph`: fixed-capacity directed graph
+- `StaticGraph`: read-only directed graph, built once
 
 Algorithms so far:
 

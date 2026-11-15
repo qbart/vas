@@ -58,12 +58,15 @@
 
 - [x] `Graph`: dynamic directed graph (add / remove nodes and edges), searchable by `PathFinder`
 
+## 0.13.0 — static graph
+
+- [x] `StaticGraph`: compressed sparse row, built once, read-only
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.13.0 — Static graph (compressed sparse row), built once, read-only
 - [ ] 0.14.0 — Spatial grid
 - [ ] 0.15.0 — Quadtree
 - [ ] 0.16.0 — Octree
