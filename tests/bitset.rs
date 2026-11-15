@@ -104,7 +104,7 @@ fn set_operations() {
     assert!(a.iter().eq([1, 2, 3, 4, 100, 101]));
     a.intersect_with(&b);
     assert!(a.iter().eq([2, 3, 4, 101]));
-    assert_eq!(a.remove(4), true);
+    assert!(a.remove(4));
     b.difference_with(&a);
     assert!(b.iter().eq([4]));
 }
