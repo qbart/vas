@@ -22,3 +22,32 @@ impl<T> fmt::Display for Full<T> {
 }
 
 impl<T> core::error::Error for Full<T> {}
+
+/// An insert at a position was rejected. Carries the value back to the caller.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum InsertError<T> {
+    /// The container has no room left.
+    Full(T),
+    /// The position is past the end of the container.
+    OutOfBounds(T),
+}
+
+impl<T> fmt::Debug for InsertError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Full(_) => "Full(..)",
+            Self::OutOfBounds(_) => "OutOfBounds(..)",
+        })
+    }
+}
+
+impl<T> fmt::Display for InsertError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Full(_) => "container is full",
+            Self::OutOfBounds(_) => "position is out of bounds",
+        })
+    }
+}
+
+impl<T> core::error::Error for InsertError<T> {}

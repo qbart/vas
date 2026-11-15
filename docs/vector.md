@@ -16,9 +16,19 @@ what makes it suitable for handing data to a renderer.
 | pop | `pop() -> Option<T>` | `None` when empty |
 | bulk push | `extend_from_slice(&[T]) -> Result<(), Full<()>>` | `T: Copy`; all or nothing, one `memcpy` |
 | resize | `resize(usize, T) -> Result<(), Full<()>>`, `resize_with(usize, FnMut() -> T)` | `resize` needs `T: Clone`; fails unchanged when above capacity |
-| remove | `swap_remove(usize) -> Option<T>` | O(1), does not preserve order |
+| insert | `insert(usize, T) -> Result<(), InsertError<T>>` | O(n), keeps order; returns the value when full or out of bounds |
+| remove, ordered | `remove(usize) -> Option<T>` | O(n), keeps order |
+| remove, fast | `swap_remove(usize) -> Option<T>` | O(1), does not preserve order |
 | shrink | `truncate(usize)`, `clear()` | drops the removed elements |
 | view | `as_slice`, `as_mut_slice`, `Deref<Target = [T]>` | all slice methods available |
+
+## Growing
+
+The vector never grows on its own. To grow, obtain a bigger block and call
+`move_into(&mut bigger) -> Result<Vector, Full<Vector>>`. It moves every
+element with one `memcpy` (any `T`), returns a vector over the new block and
+leaves the old block free. When the new block is too small the original
+vector is handed back unchanged.
 
 ## Paths
 

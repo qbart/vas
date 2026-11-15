@@ -6,7 +6,7 @@ use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, ptr, slice};
 
-use crate::Full;
+use crate::{Full, InsertError};
 
 /// A fixed-capacity, contiguous vector that lives in memory provided by the
 /// caller.
@@ -148,6 +148,78 @@ impl<'a, T> Vector<'a, T> {
             self.len += 1;
         }
         Ok(())
+    }
+
+    /// Inserts `value` at `index`, shifting later elements up by one. O(n).
+    ///
+    /// Hands the value back when the vector is full or `index > len`.
+    #[inline]
+    pub fn insert(&mut self, index: usize, value: T) -> Result<(), InsertError<T>> {
+        if index > self.len {
+            return Err(InsertError::OutOfBounds(value));
+        }
+        if self.is_full() {
+            return Err(InsertError::Full(value));
+        }
+        // SAFETY: `index <= len < capacity`, so `index..len + 1` is inside
+        // the storage. The tail `index..len` is moved up by one slot
+        // (overlapping copy), which leaves slot `index` free to be written
+        // without dropping anything.
+        unsafe {
+            let slot = self.as_mut_ptr().add(index);
+            ptr::copy(slot, slot.add(1), self.len - index);
+            slot.write(value);
+        }
+        self.len += 1;
+        Ok(())
+    }
+
+    /// Removes the element at `index`, shifting later elements down by one
+    /// so order is preserved. O(n). Returns `None` when `index` is out of
+    /// range.
+    #[inline]
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        if index >= self.len {
+            return None;
+        }
+        // SAFETY: `index < len`, so the slot is in bounds and initialised.
+        // Its value is moved out, then the tail `index + 1..len` is moved
+        // down by one slot (overlapping copy) and `len` shrinks, so the
+        // duplicated last slot is no longer considered initialised.
+        let value = unsafe {
+            let slot = self.as_mut_ptr().add(index);
+            let value = slot.read();
+            ptr::copy(slot.add(1), slot, self.len - index - 1);
+            value
+        };
+        self.len -= 1;
+        Some(value)
+    }
+
+    /// Moves all elements into `storage` with a single copy and returns a
+    /// vector over it, leaving the old storage free. This is how a vector
+    /// "grows": get a bigger block, then move into it.
+    ///
+    /// Hands the vector back unchanged when `storage` is too small.
+    #[inline]
+    pub fn move_into<'b>(
+        mut self,
+        storage: &'b mut [MaybeUninit<T>],
+    ) -> Result<Vector<'b, T>, Full<Self>> {
+        let len = self.len;
+        if storage.len() < len {
+            return Err(Full(self));
+        }
+        // SAFETY: the source holds `len` initialised elements and the
+        // destination has room for at least `len`. Both are exclusive
+        // borrows, so they cannot overlap. Setting `self.len` to zero
+        // afterwards transfers ownership of the elements: the old vector
+        // drops nothing.
+        unsafe {
+            ptr::copy_nonoverlapping(self.as_mut_ptr(), storage.as_mut_ptr().cast::<T>(), len);
+        }
+        self.len = 0;
+        Ok(Vector { storage, len })
     }
 
     /// Removes the element at `index` in O(1) by moving the last element

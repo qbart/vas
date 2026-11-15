@@ -6,6 +6,6 @@ mod error;
 pub mod memory;
 pub mod vector;
 
-pub use error::Full;
+pub use error::{Full, InsertError};
 pub use memory::Memory;
 pub use vector::Vector;

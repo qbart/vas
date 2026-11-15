@@ -9,6 +9,8 @@ indexing in the library; clippy lints in `Cargo.toml` enforce this.
   `Full` hands the rejected value back to the caller, so nothing is lost or
   dropped silently. Bulk operations that reject the whole input return
   `Full<()>` and leave the container unchanged.
+- An insert at a position returns `Result<(), InsertError<T>>`, which is
+  `Full(T)` or `OutOfBounds(T)` and also hands the value back.
 - An operation that can miss (empty container, index out of range) returns
   `Option`.
 - Failed operations leave the container unchanged.

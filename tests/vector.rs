@@ -1,6 +1,6 @@
 use core::cell::Cell;
 use core::mem::MaybeUninit;
-use vas::{Full, Vector};
+use vas::{Full, InsertError, Memory, Vector};
 
 struct Counted<'a>(&'a Cell<usize>);
 
@@ -234,4 +234,103 @@ fn module_path() {
     let mut memory = [MaybeUninit::<u8>::uninit(); 1];
     let v = vas::vector::Vector::new(&mut memory);
     assert!(v.is_empty());
+}
+
+#[test]
+fn insert_keeps_order() {
+    let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.insert(0, 3), Ok(()));
+    assert_eq!(v.insert(0, 1), Ok(()));
+    assert_eq!(v.insert(1, 2), Ok(()));
+    assert_eq!(v.insert(3, 4), Ok(()));
+    assert_eq!(v.as_slice(), &[1, 2, 3, 4]);
+}
+
+#[test]
+fn insert_rejects_and_returns_value() {
+    let mut memory = [MaybeUninit::<u32>::uninit(); 2];
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.insert(1, 9), Err(InsertError::OutOfBounds(9)));
+    assert_eq!(v.insert(0, 1), Ok(()));
+    assert_eq!(v.insert(1, 2), Ok(()));
+    assert_eq!(v.insert(0, 9), Err(InsertError::Full(9)));
+    assert_eq!(v.as_slice(), &[1, 2]);
+}
+
+#[test]
+fn remove_keeps_order() {
+    let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.extend_from_slice(&[1, 2, 3, 4]), Ok(()));
+    assert_eq!(v.remove(4), None);
+    assert_eq!(v.remove(1), Some(2));
+    assert_eq!(v.as_slice(), &[1, 3, 4]);
+    assert_eq!(v.remove(2), Some(4));
+    assert_eq!(v.remove(0), Some(1));
+    assert_eq!(v.as_slice(), &[3]);
+}
+
+#[test]
+fn insert_and_remove_drop_correctly() {
+    let drops = Cell::new(0);
+    let mut memory = [const { MaybeUninit::<Counted>::uninit() }; 3];
+    {
+        let mut v = Vector::new(&mut memory);
+        assert!(v.push(Counted(&drops)).is_ok());
+        assert!(v.push(Counted(&drops)).is_ok());
+        assert!(v.insert(1, Counted(&drops)).is_ok());
+        drop(v.remove(0));
+        assert_eq!(drops.get(), 1);
+        // A rejected value comes back to the caller and is dropped there.
+        drop(v.insert(9, Counted(&drops)));
+        assert_eq!(drops.get(), 2);
+    }
+    assert_eq!(drops.get(), 4);
+}
+
+#[test]
+fn move_into_bigger_block() {
+    let mut small = Memory::<u32, 2>::new();
+    let mut big = Memory::<u32, 4>::new();
+    let mut v = Vector::new(&mut small);
+    assert_eq!(v.extend_from_slice(&[1, 2]), Ok(()));
+    let moved = v.move_into(&mut big);
+    assert!(moved.is_ok());
+    if let Ok(mut v) = moved {
+        assert_eq!(v.capacity(), 4);
+        assert_eq!(v.as_slice(), &[1, 2]);
+        assert_eq!(v.push(3), Ok(()));
+    }
+    // The old block is free to reuse.
+    let v = Vector::new(&mut small);
+    assert!(v.is_empty());
+}
+
+#[test]
+fn move_into_too_small_block_returns_vector() {
+    let mut memory = Memory::<u32, 3>::new();
+    let mut tiny = Memory::<u32, 2>::new();
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.extend_from_slice(&[1, 2, 3]), Ok(()));
+    match v.move_into(&mut tiny) {
+        Ok(_) => assert!(false, "must not fit"),
+        Err(Full(v)) => assert_eq!(v.as_slice(), &[1, 2, 3]),
+    }
+}
+
+#[test]
+fn move_into_moves_without_dropping() {
+    let drops = Cell::new(0);
+    let mut a = Memory::<Counted, 2>::new();
+    let mut b = Memory::<Counted, 2>::new();
+    {
+        let mut v = Vector::new(&mut a);
+        assert!(v.push(Counted(&drops)).is_ok());
+        assert!(v.push(Counted(&drops)).is_ok());
+        let moved = v.move_into(&mut b);
+        assert_eq!(drops.get(), 0);
+        assert!(moved.is_ok());
+    }
+    assert_eq!(drops.get(), 2);
 }
