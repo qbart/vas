@@ -1,4 +1,5 @@
 use core::cell::Cell;
+use core::ops::Bound;
 use std::collections::BTreeMap;
 use std::string::String;
 use std::vec::Vec;
@@ -144,7 +145,8 @@ fn lookup_by_borrowed_key() {
     assert_eq!(map.insert(String::from("axe"), 3), Ok(None));
     assert_eq!(map.get("sword"), Some(&7));
     assert_eq!(map.first().map(|(key, _)| key.as_str()), Some("axe"));
-    assert_eq!(map.range::<str, _>("b".."t").count(), 1);
+    let bounds = (Bound::Included("b"), Bound::Excluded("t"));
+    assert_eq!(map.range::<str, _>(bounds).count(), 1);
     assert_eq!(map.remove("axe"), Some(3));
 }
 
@@ -179,7 +181,7 @@ fn matches_std_btreemap() {
     for step in 0..steps {
         let key = rng.u32_below(40) as u16;
         match rng.u32_below(6) {
-            0 | 1 | 2 => {
+            0..=2 => {
                 if model.len() == CAPACITY && !model.contains_key(&key) {
                     assert_eq!(map.insert(key, step), Err(Full((key, step))));
                 } else {
