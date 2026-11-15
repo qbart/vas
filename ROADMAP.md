@@ -7,9 +7,9 @@
 
 ## 0.1.0 — conventions and vector
 
-- [ ] Storage convention spec (`docs/storage.md`): memory is provided by the library user
-- [ ] Error convention spec (`docs/errors.md`): no panics, `Result` / `Option` everywhere
-- [ ] Fixed-capacity vector over user-provided memory, exposing its contents as a contiguous slice (e.g. to hand to a renderer)
+- [x] Storage convention spec (`docs/storage.md`): memory is provided by the library user
+- [x] Error convention spec (`docs/errors.md`): no panics, `Result` / `Option` everywhere
+- [x] Fixed-capacity vector over user-provided memory, exposing its contents as a contiguous slice (e.g. to hand to a renderer)
 
 ## Later
 

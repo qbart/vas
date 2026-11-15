@@ -1,4 +1,4 @@
-.PHONY: build release test lint fmt check publish clean
+.PHONY: build release test lint fmt check miri publish clean
 
 build:
 	cargo build
@@ -17,6 +17,9 @@ fmt:
 
 check: lint test
 	cargo fmt --check
+
+miri:
+	cargo +nightly miri test
 
 publish: check
 	cargo publish
