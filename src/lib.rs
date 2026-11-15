@@ -2,6 +2,7 @@
 
 #![no_std]
 
+pub mod aabb;
 pub mod binary_tree;
 pub mod bitset;
 pub mod deque;
@@ -15,10 +16,12 @@ pub mod ordered_map;
 pub mod path;
 pub mod pool;
 pub mod random;
+pub mod spatial_grid;
 pub mod static_graph;
 pub mod tree;
 pub mod vector;
 
+pub use aabb::Aabb;
 pub use binary_tree::BinaryTree;
 pub use bitset::Bitset;
 pub use deque::Deque;
@@ -31,6 +34,7 @@ pub use ordered_map::OrderedMap;
 pub use path::PathFinder;
 pub use pool::{Handle, Pool};
 pub use random::Rng;
+pub use spatial_grid::SpatialGrid;
 pub use static_graph::StaticGraph;
 pub use tree::Tree;
 pub use vector::Vector;

@@ -30,6 +30,7 @@ Containers so far:
 - `BinaryTree`: fixed-capacity binary tree
 - `Graph`: fixed-capacity directed graph
 - `StaticGraph`: read-only directed graph, built once
+- `SpatialGrid`: uniform grid for box and radius queries (2D, 3D, ...)
 
 Algorithms so far:
 
