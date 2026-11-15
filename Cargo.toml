@@ -1,0 +1,21 @@
+[package]
+name = "vas"
+version = "0.0.0"
+edition = "2024"
+description = "A collection of data structures and algorithms for game development."
+license = "MIT"
+repository = "https://github.com/qbart/vas"
+homepage = "https://github.com/qbart/vas"
+readme = "README.md"
+keywords = ["gamedev", "no_std", "data-structures", "algorithms"]
+categories = ["no-std", "game-development", "data-structures", "algorithms"]
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
