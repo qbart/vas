@@ -38,12 +38,15 @@
 
 - [x] Seedable PRNG (`Rng`, xoshiro256++)
 
+## 0.8.0 — path search
+
+- [x] A* / Dijkstra (`PathFinder`) over a neighbours callback (`path::Space`)
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.8.0 — A* / Dijkstra path search over a neighbours callback
 - [ ] 0.9.0 — `Tree`: hierarchy (parent / children / siblings) on a pool
 - [ ] 0.10.0 — `BinaryTree`: binary tree with left / right children
 - [ ] 0.11.0 — `OrderedMap`: sorted keys, range queries

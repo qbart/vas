@@ -29,5 +29,6 @@ Containers so far:
 Algorithms so far:
 
 - `Rng`: seedable pseudo-random number generator
+- `PathFinder`: A* / Dijkstra shortest path
 
 Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
