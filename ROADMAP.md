@@ -34,7 +34,11 @@
 
 - [x] Bit set (`Bitset`) over user-provided memory
 
+## 0.7.0 — random
+
+- [x] Seedable PRNG (`Rng`, xoshiro256++)
+
 ## Later
 
 - [ ] Allocator trait for containers that grow on their own
-- [ ] Algorithms: A*, spatial grid, PRNG
+- [ ] Algorithms: A*, spatial grid

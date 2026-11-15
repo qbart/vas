@@ -10,6 +10,7 @@ pub mod heap;
 pub mod map;
 pub mod memory;
 pub mod pool;
+pub mod random;
 pub mod vector;
 
 pub use bitset::Bitset;
@@ -19,4 +20,5 @@ pub use heap::Heap;
 pub use map::Map;
 pub use memory::Memory;
 pub use pool::{Handle, Pool};
+pub use random::Rng;
 pub use vector::Vector;

@@ -26,4 +26,8 @@ Containers so far:
 - `Heap`: fixed-capacity priority queue
 - `Bitset`: fixed-capacity set of bits
 
+Algorithms so far:
+
+- `Rng`: seedable pseudo-random number generator
+
 Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
