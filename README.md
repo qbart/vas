@@ -28,6 +28,7 @@ Containers so far:
 - `Bitset`: fixed-capacity set of bits
 - `Tree`: fixed-capacity hierarchy (parent / children / siblings)
 - `BinaryTree`: fixed-capacity binary tree
+- `Graph`: fixed-capacity directed graph
 
 Algorithms so far:
 

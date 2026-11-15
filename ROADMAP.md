@@ -54,12 +54,15 @@
 
 - [x] `OrderedMap`: sorted keys, nearest-key and range queries
 
+## 0.12.0 — graph
+
+- [x] `Graph`: dynamic directed graph (add / remove nodes and edges), searchable by `PathFinder`
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.12.0 — `Graph`: dynamic graph (add / remove nodes and edges)
 - [ ] 0.13.0 — Static graph (compressed sparse row), built once, read-only
 - [ ] 0.14.0 — Spatial grid
 - [ ] 0.15.0 — Quadtree

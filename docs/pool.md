@@ -14,6 +14,9 @@ value is removed its handle goes stale: every lookup returns `None`, even
 after the slot has been reused for another value. Handles are typed by `T`
 but are only meaningful for the pool that issued them.
 
+`handle.index()` is the slot index: a dense number below the capacity, reused
+after removal. Use it to keep extra per-value data in a parallel array.
+
 ## Storage
 
 The pool needs one `pool::Slot<T>` per value (the value plus 8 bytes of

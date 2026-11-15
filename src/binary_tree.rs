@@ -150,7 +150,7 @@ impl<'a, T> BinaryTree<'a, T> {
             return Err(InsertError::Occupied(value));
         }
         let id = self.add(NONE, value)?;
-        self.root = id.slot();
+        self.root = id.index();
         Ok(id)
     }
 
@@ -180,7 +180,7 @@ impl<'a, T> BinaryTree<'a, T> {
         if !self.nodes.contains(id) {
             return None;
         }
-        let top = id.slot();
+        let top = id.index();
         self.unlink(top);
         // Repeatedly remove a leaf of the subtree, so no node is removed
         // before its children and no extra memory is needed.
@@ -290,7 +290,7 @@ impl<'a, T> BinaryTree<'a, T> {
 
     fn walk(&self, id: NodeId<T>, order: Order) -> Walk<'_, 'a, T> {
         let top = if self.nodes.contains(id) {
-            id.slot()
+            id.index()
         } else {
             NONE
         };
@@ -321,11 +321,11 @@ impl<'a, T> BinaryTree<'a, T> {
         if taken {
             return Err(InsertError::Occupied(value));
         }
-        let id = self.add(parent.slot(), value)?;
-        if let Some(node) = self.nodes.get_at_mut(parent.slot()) {
+        let id = self.add(parent.index(), value)?;
+        if let Some(node) = self.nodes.get_at_mut(parent.index()) {
             match side {
-                Side::Left => node.left = id.slot(),
-                Side::Right => node.right = id.slot(),
+                Side::Left => node.left = id.index(),
+                Side::Right => node.right = id.index(),
             }
         }
         Ok(id)

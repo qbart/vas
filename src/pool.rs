@@ -54,9 +54,13 @@ impl<T> Handle<T> {
         }
     }
 
-    /// The slot this handle points at.
+    /// The index of the slot this handle points at: a small dense number
+    /// below the pool's capacity, reused after the value is removed.
+    ///
+    /// Useful for keeping extra per-value data in a parallel array, or for
+    /// algorithms that address nodes by index.
     #[inline]
-    pub(crate) const fn slot(&self) -> u32 {
+    pub const fn index(&self) -> u32 {
         self.index
     }
 }

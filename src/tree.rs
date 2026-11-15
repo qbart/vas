@@ -152,7 +152,7 @@ impl<'a, T> Tree<'a, T> {
             .nodes
             .insert(Node::new(value))
             .map_err(|Full(node)| Full(node.value))?;
-        self.link_last(NONE, id.slot());
+        self.link_last(NONE, id.index());
         Ok(id)
     }
 
@@ -169,7 +169,7 @@ impl<'a, T> Tree<'a, T> {
             .nodes
             .insert(Node::new(value))
             .map_err(|Full(node)| InsertError::Full(node.value))?;
-        self.link_last(parent.slot(), id.slot());
+        self.link_last(parent.index(), id.index());
         Ok(id)
     }
 
@@ -179,7 +179,7 @@ impl<'a, T> Tree<'a, T> {
         if !self.nodes.contains(id) {
             return None;
         }
-        let top = id.slot();
+        let top = id.index();
         self.unlink(top);
         // Repeatedly remove the deepest first descendant, so no node is
         // removed before its children and no extra memory is needed.
@@ -219,19 +219,19 @@ impl<'a, T> Tree<'a, T> {
                     return Err(MoveError::Stale);
                 }
                 // The new parent must not be inside the subtree being moved.
-                let mut ancestor = parent.slot();
+                let mut ancestor = parent.index();
                 while ancestor != NONE {
-                    if ancestor == id.slot() {
+                    if ancestor == id.index() {
                         return Err(MoveError::Cycle);
                     }
                     ancestor = self.link(ancestor, |node| node.parent);
                 }
-                parent.slot()
+                parent.index()
             }
             None => NONE,
         };
-        self.unlink(id.slot());
-        self.link_last(target, id.slot());
+        self.unlink(id.index());
+        self.link_last(target, id.index());
         Ok(())
     }
 
@@ -330,7 +330,7 @@ impl<'a, T> Tree<'a, T> {
     pub fn descendants(&self, id: NodeId<T>) -> Descendants<'_, 'a, T> {
         Descendants {
             tree: self,
-            top: id.slot(),
+            top: id.index(),
             next: self.nodes.get(id).map_or(NONE, |node| node.first_child),
         }
     }
