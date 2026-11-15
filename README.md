@@ -26,6 +26,7 @@ Containers so far:
 - `Heap`: fixed-capacity priority queue
 - `Bitset`: fixed-capacity set of bits
 - `Tree`: fixed-capacity hierarchy (parent / children / siblings)
+- `BinaryTree`: fixed-capacity binary tree
 
 Algorithms so far:
 

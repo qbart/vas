@@ -2,6 +2,7 @@
 
 #![no_std]
 
+pub mod binary_tree;
 pub mod bitset;
 pub mod deque;
 mod error;
@@ -15,6 +16,7 @@ pub mod random;
 pub mod tree;
 pub mod vector;
 
+pub use binary_tree::BinaryTree;
 pub use bitset::Bitset;
 pub use deque::Deque;
 pub use error::{Full, InsertError, OutOfBounds};
