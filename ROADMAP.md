@@ -50,12 +50,15 @@
 
 - [x] `BinaryTree`: binary tree with left / right children
 
+## 0.11.0 — ordered map
+
+- [x] `OrderedMap`: sorted keys, nearest-key and range queries
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.11.0 — `OrderedMap`: sorted keys, range queries
 - [ ] 0.12.0 — `Graph`: dynamic graph (add / remove nodes and edges)
 - [ ] 0.13.0 — Static graph (compressed sparse row), built once, read-only
 - [ ] 0.14.0 — Spatial grid

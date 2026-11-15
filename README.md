@@ -22,6 +22,7 @@ Containers so far:
 - `Vector`: fixed-capacity contiguous vector
 - `Pool`: fixed-capacity store with generational handles
 - `Map`: fixed-capacity unordered map
+- `OrderedMap`: fixed-capacity map sorted by key
 - `Deque`: fixed-capacity double-ended queue (ring buffer)
 - `Heap`: fixed-capacity priority queue
 - `Bitset`: fixed-capacity set of bits
