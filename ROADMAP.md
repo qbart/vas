@@ -13,7 +13,12 @@
 - [x] `Memory<T, N>` inline storage block
 - [x] Vector `insert`, `remove`, `resize`, `move_into`
 
+## 0.2.0 — pool
+
+- [x] Generational pool (`Pool`, `Handle`) over user-provided memory
+
 ## Later
 
-- [ ] Ring buffer, generational slot map, binary heap, bitset
+- [ ] Ring buffer, binary heap, bitset
+- [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG
