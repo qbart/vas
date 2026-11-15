@@ -10,6 +10,8 @@
 - [x] Storage convention spec (`docs/storage.md`): memory is provided by the library user
 - [x] Error convention spec (`docs/errors.md`): no panics, `Result` / `Option` everywhere
 - [x] Fixed-capacity vector over user-provided memory, exposing its contents as a contiguous slice (e.g. to hand to a renderer)
+- [x] `Memory<T, N>` inline storage block
+- [x] Vector `insert`, `remove`, `resize`, `move_into`
 
 ## Later
 

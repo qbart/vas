@@ -2,6 +2,19 @@
 
 vas is a collection of data containers, structures and algorithms for game development in Rust focused on speed and memory control.
 
-`no_std`, zero dependencies.
+- `no_std`, zero dependencies
+- never allocates: every container works on memory you provide
+- never panics: fallible operations return `Result` / `Option`
 
-Work in progress — nothing to see here yet.
+```rust
+use vas::{Memory, Vector};
+
+let mut memory = Memory::<f32, 1024>::new();
+let mut v = Vector::new(&mut memory);
+
+assert!(v.push(1.0).is_ok());
+assert!(v.extend_from_slice(&[2.0, 3.0]).is_ok());
+assert_eq!(v.as_slice(), &[1.0, 2.0, 3.0]); // one contiguous block
+```
+
+Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
