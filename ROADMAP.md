@@ -26,8 +26,12 @@
 
 - [x] Double-ended queue / ring buffer (`Deque`) over user-provided memory
 
+## 0.5.0 — heap
+
+- [x] Binary heap / priority queue (`Heap`) with `Max`, `Min` and custom orders
+
 ## Later
 
-- [ ] Binary heap, bitset
+- [ ] Bitset
 - [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG
