@@ -2,6 +2,7 @@
 
 #![no_std]
 
+pub mod deque;
 mod error;
 pub mod hash;
 pub mod map;
@@ -9,6 +10,7 @@ pub mod memory;
 pub mod pool;
 pub mod vector;
 
+pub use deque::Deque;
 pub use error::{Full, InsertError};
 pub use map::Map;
 pub use memory::Memory;

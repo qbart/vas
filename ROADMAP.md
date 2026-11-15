@@ -22,8 +22,12 @@
 - [x] Unordered map (`Map`) over user-provided memory
 - [x] `FastHasher`, replaceable through `BuildHasher`
 
+## 0.4.0 — deque
+
+- [x] Double-ended queue / ring buffer (`Deque`) over user-provided memory
+
 ## Later
 
-- [ ] Ring buffer, binary heap, bitset
+- [ ] Binary heap, bitset
 - [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG
