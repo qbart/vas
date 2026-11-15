@@ -17,9 +17,13 @@
 
 - [x] Generational pool (`Pool`, `Handle`) over user-provided memory
 
+## 0.3.0 — map
+
+- [x] Unordered map (`Map`) over user-provided memory
+- [x] `FastHasher`, replaceable through `BuildHasher`
+
 ## Later
 
-- [ ] Unordered map (`Map`)
 - [ ] Ring buffer, binary heap, bitset
 - [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG

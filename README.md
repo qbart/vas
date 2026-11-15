@@ -21,5 +21,6 @@ Containers so far:
 
 - `Vector`: fixed-capacity contiguous vector
 - `Pool`: fixed-capacity store with generational handles
+- `Map`: fixed-capacity unordered map
 
 Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
