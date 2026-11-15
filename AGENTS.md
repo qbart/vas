@@ -1,6 +1,6 @@
 # vas
 
-vas is a collection of data structures and algorithms for game development in rust.
+vas is a collection of data containers, structures and algorithms for game development in rust.
 
 ## Rules
 
