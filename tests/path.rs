@@ -72,11 +72,11 @@ impl Grid {
                 if self.is_wall(next) {
                     continue;
                 }
-                if let Some(d) = distance.get_mut(next as usize) {
-                    if *d == u32::MAX {
-                        *d = here + 1;
-                        queue.push_back(next);
-                    }
+                if let Some(d) = distance.get_mut(next as usize)
+                    && *d == u32::MAX
+                {
+                    *d = here + 1;
+                    queue.push_back(next);
                 }
             }
         }
