@@ -17,3 +17,4 @@ vas is a collection of data structures and algorithms for game development in ru
 9. Every milestone should have its own tag bump 0.x.0
 10. No dependencies should be used.
 11. The crate must be `no_std` — this is the main goal.
+12. Allocation must be controlled by the library user — the library never allocates on its own.
