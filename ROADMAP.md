@@ -19,6 +19,7 @@
 
 ## Later
 
+- [ ] Unordered map (`Map`)
 - [ ] Ring buffer, binary heap, bitset
 - [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG

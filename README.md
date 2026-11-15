@@ -17,4 +17,9 @@ assert!(v.extend_from_slice(&[2.0, 3.0]).is_ok());
 assert_eq!(v.as_slice(), &[1.0, 2.0, 3.0]); // one contiguous block
 ```
 
+Containers so far:
+
+- `Vector`: fixed-capacity contiguous vector
+- `Pool`: fixed-capacity store with generational handles
+
 Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
