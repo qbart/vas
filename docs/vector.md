@@ -15,9 +15,20 @@ what makes it suitable for handing data to a renderer.
 | push | `push(T) -> Result<(), Full<T>>` | returns the value when full |
 | pop | `pop() -> Option<T>` | `None` when empty |
 | bulk push | `extend_from_slice(&[T]) -> Result<(), Full<()>>` | `T: Copy`; all or nothing, one `memcpy` |
+| resize | `resize(usize, T) -> Result<(), Full<()>>`, `resize_with(usize, FnMut() -> T)` | `resize` needs `T: Clone`; fails unchanged when above capacity |
 | remove | `swap_remove(usize) -> Option<T>` | O(1), does not preserve order |
 | shrink | `truncate(usize)`, `clear()` | drops the removed elements |
 | view | `as_slice`, `as_mut_slice`, `Deref<Target = [T]>` | all slice methods available |
+
+## Paths
+
+The type lives in the public module `vas::vector` and is re-exported as
+`vas::Vector`.
+
+## No `reserve`
+
+The capacity is fixed by the storage the user passed in, so there is nothing
+to reserve. Use `remaining()` to check for room up front.
 
 ## Guarantees
 

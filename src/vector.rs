@@ -118,6 +118,38 @@ impl<'a, T> Vector<'a, T> {
         Ok(())
     }
 
+    /// Sets the length to `len`. New slots are filled with clones of `value`;
+    /// surplus elements are dropped. Fails without changes when `len` exceeds
+    /// the capacity.
+    #[inline]
+    pub fn resize(&mut self, len: usize, value: T) -> Result<(), Full<()>>
+    where
+        T: Clone,
+    {
+        self.resize_with(len, || value.clone())
+    }
+
+    /// Sets the length to `len`. New slots are filled by calling `fill` once
+    /// per slot; surplus elements are dropped. Fails without changes when
+    /// `len` exceeds the capacity.
+    #[inline]
+    pub fn resize_with(&mut self, len: usize, mut fill: impl FnMut() -> T) -> Result<(), Full<()>> {
+        if len <= self.len {
+            self.truncate(len);
+            return Ok(());
+        }
+        let Some(slots) = self.storage.get_mut(self.len..len) else {
+            return Err(Full(()));
+        };
+        for slot in slots {
+            slot.write(fill());
+            // Count each element as soon as it exists, so a panicking `fill`
+            // leaves the vector consistent.
+            self.len += 1;
+        }
+        Ok(())
+    }
+
     /// Removes the element at `index` in O(1) by moving the last element
     /// into its place. Returns `None` when `index` is out of range.
     #[inline]

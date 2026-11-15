@@ -186,3 +186,52 @@ fn full_error_is_displayable() {
     use std::string::ToString;
     assert_eq!(Full(1).to_string(), "container is full");
 }
+
+#[test]
+fn resize_grows_shrinks_and_rejects() {
+    let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.resize(3, 7), Ok(()));
+    assert_eq!(v.as_slice(), &[7, 7, 7]);
+    assert_eq!(v.resize(1, 0), Ok(()));
+    assert_eq!(v.as_slice(), &[7]);
+    assert_eq!(v.resize(5, 0), Err(Full(())));
+    assert_eq!(v.as_slice(), &[7]);
+    assert_eq!(v.resize(4, 9), Ok(()));
+    assert_eq!(v.as_slice(), &[7, 9, 9, 9]);
+}
+
+#[test]
+fn resize_with_calls_closure_per_new_element() {
+    let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+    let mut v = Vector::new(&mut memory);
+    let mut next = 0;
+    assert_eq!(
+        v.resize_with(3, || {
+            next += 1;
+            next
+        }),
+        Ok(())
+    );
+    assert_eq!(v.as_slice(), &[1, 2, 3]);
+    assert_eq!(v.resize_with(5, || 0), Err(Full(())));
+    assert_eq!(v.resize_with(0, || 0), Ok(()));
+    assert!(v.is_empty());
+}
+
+#[test]
+fn resize_drops_removed_elements() {
+    let drops = Cell::new(0);
+    let mut memory = [const { MaybeUninit::<Counted>::uninit() }; 4];
+    let mut v = Vector::new(&mut memory);
+    assert_eq!(v.resize_with(4, || Counted(&drops)), Ok(()));
+    assert_eq!(v.resize_with(1, || Counted(&drops)), Ok(()));
+    assert_eq!(drops.get(), 3);
+}
+
+#[test]
+fn module_path() {
+    let mut memory = [MaybeUninit::<u8>::uninit(); 1];
+    let v = vas::vector::Vector::new(&mut memory);
+    assert!(v.is_empty());
+}

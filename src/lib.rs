@@ -3,7 +3,7 @@
 #![no_std]
 
 mod error;
-mod vector;
+pub mod vector;
 
 pub use error::Full;
 pub use vector::Vector;
