@@ -25,6 +25,7 @@ Containers so far:
 - `Deque`: fixed-capacity double-ended queue (ring buffer)
 - `Heap`: fixed-capacity priority queue
 - `Bitset`: fixed-capacity set of bits
+- `Tree`: fixed-capacity hierarchy (parent / children / siblings)
 
 Algorithms so far:
 

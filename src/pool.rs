@@ -53,6 +53,12 @@ impl<T> Handle<T> {
             marker: PhantomData,
         }
     }
+
+    /// The slot this handle points at.
+    #[inline]
+    pub(crate) const fn slot(&self) -> u32 {
+        self.index
+    }
 }
 
 impl<T> Clone for Handle<T> {
@@ -286,6 +292,33 @@ impl<'a, T> Pool<'a, T> {
         IterMut {
             slots: self.slots_mut().iter_mut().enumerate(),
         }
+    }
+
+    /// The live value in slot `index`, whatever its generation. For
+    /// structures built on the pool that keep their own links as indices.
+    #[inline]
+    pub(crate) fn get_at(&self, index: u32) -> Option<&T> {
+        let slot = self.slots().get(index as usize)?;
+        // SAFETY: an occupied slot holds an initialised value.
+        slot.is_occupied()
+            .then(|| unsafe { slot.value.assume_init_ref() })
+    }
+
+    /// Like [`get_at`](Self::get_at), mutably.
+    #[inline]
+    pub(crate) fn get_at_mut(&mut self, index: u32) -> Option<&mut T> {
+        let slot = self.slots_mut().get_mut(index as usize)?;
+        // SAFETY: an occupied slot holds an initialised value.
+        slot.is_occupied()
+            .then(|| unsafe { slot.value.assume_init_mut() })
+    }
+
+    /// The current handle of the live value in slot `index`.
+    #[inline]
+    pub(crate) fn handle_at(&self, index: u32) -> Option<Handle<T>> {
+        let slot = self.slots().get(index as usize)?;
+        slot.is_occupied()
+            .then(|| Handle::new(index, slot.generation))
     }
 
     #[inline]

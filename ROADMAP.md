@@ -42,12 +42,15 @@
 
 - [x] A* / Dijkstra (`PathFinder`) over a neighbours callback (`path::Space`)
 
+## 0.9.0 — tree
+
+- [x] `Tree`: hierarchy (parent / children / siblings) on a pool
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.9.0 — `Tree`: hierarchy (parent / children / siblings) on a pool
 - [ ] 0.10.0 — `BinaryTree`: binary tree with left / right children
 - [ ] 0.11.0 — `OrderedMap`: sorted keys, range queries
 - [ ] 0.12.0 — `Graph`: dynamic graph (add / remove nodes and edges)

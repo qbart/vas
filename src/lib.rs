@@ -12,6 +12,7 @@ pub mod memory;
 pub mod path;
 pub mod pool;
 pub mod random;
+pub mod tree;
 pub mod vector;
 
 pub use bitset::Bitset;
@@ -23,4 +24,5 @@ pub use memory::Memory;
 pub use path::PathFinder;
 pub use pool::{Handle, Pool};
 pub use random::Rng;
+pub use tree::Tree;
 pub use vector::Vector;
