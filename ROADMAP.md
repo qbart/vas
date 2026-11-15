@@ -38,7 +38,24 @@
 
 - [x] Seedable PRNG (`Rng`, xoshiro256++)
 
+## Planned
+
+All structures are index-based (nodes live in user-provided blocks and refer
+to each other by index or handle), never pointer-based.
+
+- [ ] 0.8.0 — A* / Dijkstra path search over a neighbours callback
+- [ ] 0.9.0 — `Tree`: hierarchy (parent / children / siblings) on a pool
+- [ ] 0.10.0 — `BinaryTree`: binary tree with left / right children
+- [ ] 0.11.0 — `OrderedMap`: sorted keys, range queries
+- [ ] 0.12.0 — `Graph`: dynamic graph (add / remove nodes and edges)
+- [ ] 0.13.0 — Static graph (compressed sparse row), built once, read-only
+- [ ] 0.14.0 — Spatial grid
+- [ ] 0.15.0 — Quadtree
+- [ ] 0.16.0 — Octree
+- [ ] 0.17.0 — BVH
+- [ ] 0.18.0 — k-d tree
+
 ## Later
 
+- [ ] Red-black tree
 - [ ] Allocator trait for containers that grow on their own
-- [ ] Algorithms: A*, spatial grid
