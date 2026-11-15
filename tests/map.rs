@@ -181,10 +181,11 @@ fn check_against_std<S: BuildHasher>(hasher: S, capacity_is_32: &mut Memory<Slot
     let mut map = Map::with_hasher(capacity_is_32, hasher);
     let mut model: HashMap<u16, u32> = HashMap::new();
     let mut seed: u32 = 0x1234_5678;
-    for step in 0..3000u32 {
+    let steps: u32 = if cfg!(miri) { 400 } else { 3000 };
+    for step in 0..steps {
         seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         let key = ((seed >> 16) % 48) as u16;
-        if (seed >> 8) % 3 == 0 {
+        if (seed >> 8).is_multiple_of(3) {
             assert_eq!(map.remove(&key), model.remove(&key));
         } else if model.len() == 32 && !model.contains_key(&key) {
             assert_eq!(map.insert(key, step), Err(Full((key, step))));
