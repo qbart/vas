@@ -30,8 +30,11 @@
 
 - [x] Binary heap / priority queue (`Heap`) with `Max`, `Min` and custom orders
 
+## 0.6.0 — bitset
+
+- [x] Bit set (`Bitset`) over user-provided memory
+
 ## Later
 
-- [ ] Bitset
 - [ ] Allocator trait for containers that grow on their own
 - [ ] Algorithms: A*, spatial grid, PRNG

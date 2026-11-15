@@ -51,3 +51,15 @@ impl<T> fmt::Display for InsertError<T> {
 }
 
 impl<T> core::error::Error for InsertError<T> {}
+
+/// An index was past the end of the container.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OutOfBounds;
+
+impl fmt::Display for OutOfBounds {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("index is out of bounds")
+    }
+}
+
+impl core::error::Error for OutOfBounds {}

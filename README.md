@@ -24,5 +24,6 @@ Containers so far:
 - `Map`: fixed-capacity unordered map
 - `Deque`: fixed-capacity double-ended queue (ring buffer)
 - `Heap`: fixed-capacity priority queue
+- `Bitset`: fixed-capacity set of bits
 
 Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).

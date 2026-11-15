@@ -11,6 +11,7 @@ indexing in the library; clippy lints in `Cargo.toml` enforce this.
   `Full<()>` and leave the container unchanged.
 - An insert at a position returns `Result<(), InsertError<T>>`, which is
   `Full(T)` or `OutOfBounds(T)` and also hands the value back.
+- A write to an index past the end returns `Err(OutOfBounds)`.
 - An operation that can miss (empty container, index out of range) returns
   `Option`.
 - Failed operations leave the container unchanged.
