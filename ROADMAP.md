@@ -90,6 +90,7 @@
 
 - [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
 - [ ] Red-black tree
+- [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
 - [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
   - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
