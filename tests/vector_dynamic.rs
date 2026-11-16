@@ -5,7 +5,7 @@ use core::cell::Cell;
 use core::ptr::NonNull;
 use vas::allocator::Allocator;
 use vas::storage::Storage;
-use vas::{Arena, Dynamic, Full, InsertError, Inline, Memory, Vector};
+use vas::{Arena, Dynamic, Full, Inline, InsertError, Memory, Vector};
 
 /// Counts drops, to check that elements are dropped exactly once.
 struct Tracked<'a>(&'a Cell<u32>);

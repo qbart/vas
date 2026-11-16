@@ -8,9 +8,11 @@
 //!   [`Arena`](crate::Arena), or any `&mut [MaybeUninit<T>]`.
 //! - [`Inline<N>`]: room for `N` elements inside the container itself. No
 //!   lifetime, nothing to borrow; the container can be a plain struct field.
+//! - [`Dynamic<A>`]: memory taken from an [`Allocator`] as the container
+//!   fills up. The only kind that grows.
 //!
 //! The kind is chosen by what is passed to the container's `new`: a
-//! reference borrows, a value is stored inline.
+//! reference borrows, a value is stored inline, `Dynamic(allocator)` grows.
 //!
 //! ```
 //! use vas::{Borrowed, Inline, Memory, Vector};
@@ -23,12 +25,16 @@
 
 #![allow(unsafe_code)]
 
+use core::alloc::Layout;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 use core::slice;
 
 use crate::Memory;
+use crate::allocator::Allocator;
+#[cfg(feature = "alloc")]
+use crate::allocator::Global;
 
 /// A kind of storage: decides which buffer holds the elements of a
 /// container of `T`.
@@ -52,16 +58,19 @@ pub trait Storage<T> {
     type Buffer: Buffer<T>;
 }
 
-/// A fixed run of slots for values of `T`.
+/// A run of slots for values of `T`.
 ///
 /// # Safety
 ///
 /// Containers rely on the following, and implementations must uphold it:
 ///
-/// - `slots` and `slots_mut` always return the same slots, in the same
-///   order and with the same length, for as long as the buffer exists.
+/// - `slots` and `slots_mut` return the same slots, in the same order and
+///   with the same length, until [`grow`](Self::grow) returns `true`.
 /// - What a container writes into a slot stays there until the container
 ///   overwrites it. Moving the buffer value moves the contents with it.
+/// - After `grow(min)` returns `true` there are at least `min` slots, and
+///   each slot that existed before holds the same bytes at the same index.
+///   When it returns `false` nothing has changed.
 /// - The slots are not reachable in any other way while the buffer exists.
 pub unsafe trait Buffer<T> {
     /// All slots.
@@ -69,6 +78,14 @@ pub unsafe trait Buffer<T> {
 
     /// All slots, mutably.
     fn slots_mut(&mut self) -> &mut [MaybeUninit<T>];
+
+    /// Tries to make room for at least `min` slots, keeping the contents.
+    /// Buffers of a fixed size return `false`, which is the default.
+    #[inline]
+    fn grow(&mut self, min: usize) -> bool {
+        let _ = min;
+        false
+    }
 }
 
 /// Something a container can be built on. Says which kind of [`Storage`]
@@ -78,6 +95,7 @@ pub unsafe trait Buffer<T> {
 /// |---|---|
 /// | `&mut [MaybeUninit<T>]`, `&mut [MaybeUninit<T>; N]`, `&mut Memory<T, N>` | [`Borrowed`] |
 /// | `Memory<T, N>`, `[MaybeUninit<T>; N]` | [`Inline<N>`] |
+/// | `Dynamic(allocator)` | [`Dynamic<A>`] |
 pub trait IntoBuffer<T> {
     /// The kind of storage this turns into.
     type Storage: Storage<T>;
@@ -100,6 +118,64 @@ pub struct Borrowed<'a>(PhantomData<&'a mut ()>);
 /// struct field or a `static`. Moving the container copies all `N` slots,
 /// so keep large ones in [`Borrowed`] storage instead.
 pub struct Inline<const N: usize>;
+
+/// Storage that grows: memory is taken from the allocator `A` when the
+/// container runs out of room, and given back when it is dropped.
+///
+/// A container starts without any memory; inserting never fails for lack
+/// of room unless the allocator refuses. Growing moves the elements, so it
+/// happens in steps (the capacity at least doubles each time).
+///
+/// Pass `Dynamic(allocator)` to a container's `new`. Use `&allocator` to
+/// share one allocator between containers.
+///
+/// ```
+/// use vas::{Arena, Dynamic, Memory, Vector};
+///
+/// let mut block = Memory::<u8, 1024>::new();
+/// let arena = Arena::new(&mut block);
+/// let mut v = Vector::new(Dynamic(&arena));
+/// for i in 0..100u32 {
+///     assert!(v.push(i).is_ok());
+/// }
+/// ```
+///
+/// With the `alloc` feature the allocator defaults to
+/// [`Global`](crate::Global), so `Vector<f32, Dynamic>` grows on the heap.
+#[cfg(feature = "alloc")]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Dynamic<A = Global>(pub A);
+
+/// Storage that grows: memory is taken from the allocator `A` when the
+/// container runs out of room, and given back when it is dropped.
+///
+/// A container starts without any memory; inserting never fails for lack
+/// of room unless the allocator refuses. Growing moves the elements, so it
+/// happens in steps (the capacity at least doubles each time).
+///
+/// Pass `Dynamic(allocator)` to a container's `new`. Use `&allocator` to
+/// share one allocator between containers.
+///
+/// ```
+/// use vas::{Arena, Dynamic, Memory, Vector};
+///
+/// let mut block = Memory::<u8, 1024>::new();
+/// let arena = Arena::new(&mut block);
+/// let mut v = Vector::new(Dynamic(&arena));
+/// for i in 0..100u32 {
+///     assert!(v.push(i).is_ok());
+/// }
+/// ```
+///
+/// With the `alloc` feature the allocator defaults to the global one, so
+/// `Vector<f32, Dynamic>` grows on the heap.
+#[cfg(not(feature = "alloc"))]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Dynamic<A>(pub A);
+
+impl<T, A: Allocator> Storage<T> for Dynamic<A> {
+    type Buffer = Allocation<T, A>;
+}
 
 impl<'a, T> Storage<T> for Borrowed<'a> {
     type Buffer = Slots<'a, T>;
@@ -157,6 +233,118 @@ unsafe impl<T> Buffer<T> for Slots<'_, T> {
     }
 }
 
+/// The buffer of [`Dynamic`] storage: a block of slots taken from the
+/// allocator `A`, replaced by a bigger one on demand and freed on drop.
+pub struct Allocation<T, A: Allocator> {
+    // Invariant: `start..start + len` is a slice of `MaybeUninit<T>`. When
+    // `len > 0` and `T` is not zero-sized it is a block from `allocator`
+    // with the layout of `[T; len]`, owned by this value. Otherwise `start`
+    // is dangling and nothing is allocated.
+    start: NonNull<MaybeUninit<T>>,
+    len: usize,
+    allocator: A,
+}
+
+// SAFETY: `Allocation` owns its slots like a `Box<[MaybeUninit<T>]>` and
+// its allocator, so it can move to another thread when both can.
+unsafe impl<T: Send, A: Allocator + Send> Send for Allocation<T, A> {}
+// SAFETY: shared access only reads the slots and the allocator.
+unsafe impl<T: Sync, A: Allocator + Sync> Sync for Allocation<T, A> {}
+
+impl<T, A: Allocator> Allocation<T, A> {
+    /// Slots allocated the first time the buffer grows, unless more are
+    /// asked for.
+    const FIRST: usize = if size_of::<T>() <= 1024 { 4 } else { 1 };
+
+    /// Creates an empty buffer; nothing is allocated until it grows.
+    #[inline]
+    pub const fn new(allocator: A) -> Self {
+        Self {
+            start: NonNull::dangling(),
+            len: 0,
+            allocator,
+        }
+    }
+
+    /// Replaces the block by one of exactly `len` slots, keeping the
+    /// contents. `len` is larger than the current length.
+    #[cold]
+    fn grow_to(&mut self, len: usize) -> bool {
+        if size_of::<T>() == 0 {
+            // Slots of zero bytes need no memory.
+            self.len = len;
+            return true;
+        }
+        let Ok(new) = Layout::array::<T>(len) else {
+            return false;
+        };
+        let block = if self.len == 0 {
+            self.allocator.allocate(new)
+        } else {
+            let Ok(old) = Layout::array::<T>(self.len) else {
+                return false;
+            };
+            // SAFETY: by the invariant the block came from this allocator
+            // with the layout `old`. `new` has the same alignment and is
+            // larger, as `len > self.len`.
+            unsafe { self.allocator.grow(self.start.cast(), old, new) }
+        };
+        match block {
+            Ok(block) => {
+                self.start = block.cast();
+                self.len = len;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+}
+
+impl<T, A: Allocator> Drop for Allocation<T, A> {
+    #[inline]
+    fn drop(&mut self) {
+        if self.len == 0 || size_of::<T>() == 0 {
+            return;
+        }
+        if let Ok(layout) = Layout::array::<T>(self.len) {
+            // SAFETY: by the invariant the block came from this allocator
+            // with this layout, and it is not used again.
+            unsafe { self.allocator.free(self.start.cast(), layout) }
+        }
+    }
+}
+
+// SAFETY: the slots are one block owned by this value, returned unchanged
+// by both methods. `grow` succeeds only through `grow_to`, which keeps the
+// old slots' bytes (the allocator's `grow` contract) and sets the length
+// to at least `min`; on failure nothing is changed.
+unsafe impl<T, A: Allocator> Buffer<T> for Allocation<T, A> {
+    #[inline]
+    fn slots(&self) -> &[MaybeUninit<T>] {
+        // SAFETY: by the invariant this is a live slice (dangling and empty,
+        // or zero-sized slots, before anything is allocated).
+        unsafe { slice::from_raw_parts(self.start.as_ptr(), self.len) }
+    }
+
+    #[inline]
+    fn slots_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        // SAFETY: as in `slots`, and `&mut self` makes this the only access.
+        unsafe { slice::from_raw_parts_mut(self.start.as_ptr(), self.len) }
+    }
+
+    #[inline]
+    fn grow(&mut self, min: usize) -> bool {
+        if min <= self.len {
+            return true;
+        }
+        // At least double, so that a run of pushes copies each element a
+        // constant number of times on average.
+        let doubled = self.len.saturating_mul(2).max(Self::FIRST);
+        // When there is no memory for the doubled size, settle for `min`.
+        self.grow_to(min.max(doubled)) || (min < doubled && self.grow_to(min))
+    }
+}
+
 // SAFETY: an array owns its slots; both methods return all of them.
 unsafe impl<T, const N: usize> Buffer<T> for [MaybeUninit<T>; N] {
     #[inline]
@@ -194,6 +382,15 @@ impl<'a, T, const N: usize> IntoBuffer<T> for &'a mut Memory<T, N> {
     #[inline]
     fn into_buffer(self) -> Slots<'a, T> {
         Slots::new(self)
+    }
+}
+
+impl<T, A: Allocator> IntoBuffer<T> for Dynamic<A> {
+    type Storage = Dynamic<A>;
+
+    #[inline]
+    fn into_buffer(self) -> Allocation<T, A> {
+        Allocation::new(self.0)
     }
 }
 

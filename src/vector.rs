@@ -1,4 +1,4 @@
-//! Fixed-capacity vector over borrowed or inline memory.
+//! Contiguous vector over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -6,19 +6,22 @@ use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, ptr, slice};
 
-use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Allocation, Buffer, Dynamic, Inline, IntoBuffer, Storage};
 use crate::{Full, InsertError};
 
-/// A fixed-capacity, contiguous vector.
+/// A contiguous vector.
 ///
 /// The storage parameter `S` decides where the elements live (see
 /// [`storage`](crate::storage)):
 ///
 /// - `Vector<T, Borrowed<'a>>` uses memory provided by the caller.
 /// - `Vector<T, Inline<N>>` holds room for `N` elements itself.
+/// - `Vector<T, Dynamic<A>>` takes memory from the allocator `A` and grows.
 ///
-/// The capacity never changes. The contents are always one contiguous
-/// block, available through [`as_slice`](Self::as_slice).
+/// With borrowed and inline storage the capacity never changes. The
+/// contents are always one contiguous block, available through
+/// [`as_slice`](Self::as_slice).
 ///
 /// ```
 /// use vas::{Inline, Memory, Vector};
@@ -37,6 +40,20 @@ use crate::{Full, InsertError};
 /// }
 /// let particles = Particles { x: Vector::inline(), y: Vector::inline() };
 /// assert_eq!(particles.x.capacity() + particles.y.capacity(), 2048);
+/// ```
+///
+/// Growing, here inside an arena:
+///
+/// ```
+/// use vas::{Arena, Dynamic, Memory, Vector};
+///
+/// let mut block = Memory::<u8, 4096>::new();
+/// let arena = Arena::new(&mut block);
+/// let mut v = Vector::new(Dynamic(&arena));
+/// for i in 0..500u32 {
+///     assert!(v.push(i).is_ok());
+/// }
+/// assert_eq!(v.len(), 500);
 /// ```
 pub struct Vector<T, S: Storage<T>> {
     // Invariant: `len <= buffer.slots().len()` and the first `len` slots
@@ -66,12 +83,24 @@ impl<T, const N: usize> Default for Vector<T, Inline<N>> {
     }
 }
 
+impl<T, A: Allocator + Default> Default for Vector<T, Dynamic<A>> {
+    /// Creates an empty vector that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self {
+            buffer: Allocation::new(A::default()),
+            len: 0,
+        }
+    }
+}
+
 impl<T, S: Storage<T>> Vector<T, S> {
     /// Creates an empty vector on `buffer`.
     ///
     /// Pass a reference (`&mut Memory`, `&mut [MaybeUninit<T>]`, a piece of
-    /// an arena) to borrow the memory, or a value (`Memory::new()`) to store
-    /// it inside the vector.
+    /// an arena) to borrow the memory, a value (`Memory::new()`) to store
+    /// it inside the vector, or `Dynamic(allocator)` for a vector that
+    /// grows.
     #[inline]
     pub fn new<B>(buffer: B) -> Self
     where
@@ -89,13 +118,14 @@ impl<T, S: Storage<T>> Vector<T, S> {
         self.len
     }
 
-    /// Maximum number of elements the vector can hold.
+    /// Number of elements the vector can hold without growing. For borrowed
+    /// and inline storage this is the maximum.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.buffer.slots().len()
     }
 
-    /// Number of elements that can still be pushed.
+    /// Number of elements that can still be pushed without growing.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.capacity() - self.len
@@ -107,15 +137,40 @@ impl<T, S: Storage<T>> Vector<T, S> {
         self.len == 0
     }
 
-    /// `true` when no more elements can be pushed.
+    /// `true` when the next push needs more memory: it fails with borrowed
+    /// and inline storage, and grows with dynamic storage.
     #[inline]
     pub fn is_full(&self) -> bool {
         self.len == self.capacity()
     }
 
-    /// Appends `value`, or hands it back in [`Full`] when there is no room.
+    /// Makes sure `additional` more elements fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        match self.len.checked_add(additional) {
+            Some(capacity) if self.fits(capacity) => Ok(()),
+            _ => Err(Full(())),
+        }
+    }
+
+    /// `true` when there is room for `capacity` elements, after growing the
+    /// storage if it can grow.
+    #[inline]
+    fn fits(&mut self, capacity: usize) -> bool {
+        capacity <= self.capacity() || self.buffer.grow(capacity)
+    }
+
+    /// Appends `value`. With dynamic storage the vector grows when needed.
+    ///
+    /// Hands the value back in [`Full`] when there is no room: the storage
+    /// is fixed and full, or the allocator refused.
     #[inline]
     pub fn push(&mut self, value: T) -> Result<(), Full<T>> {
+        if self.len == self.capacity() && !self.buffer.grow(self.len.saturating_add(1)) {
+            return Err(Full(value));
+        }
         match self.buffer.slots_mut().get_mut(self.len) {
             Some(slot) => {
                 slot.write(value);
@@ -151,9 +206,7 @@ impl<T, S: Storage<T>> Vector<T, S> {
     where
         T: Copy,
     {
-        if values.len() > self.remaining() {
-            return Err(Full(()));
-        }
+        self.reserve(values.len())?;
         // SAFETY: `len + values.len() <= capacity`, so the destination range
         // is inside the buffer. `values` is a shared borrow and the buffer
         // is reached through `&mut self`, so the ranges cannot overlap.
@@ -188,6 +241,9 @@ impl<T, S: Storage<T>> Vector<T, S> {
             self.truncate(len);
             return Ok(());
         }
+        if !self.fits(len) {
+            return Err(Full(()));
+        }
         let Some(slots) = self.buffer.slots_mut().get_mut(self.len..len) else {
             return Err(Full(()));
         };
@@ -208,7 +264,7 @@ impl<T, S: Storage<T>> Vector<T, S> {
         if index > self.len {
             return Err(InsertError::OutOfBounds(value));
         }
-        if self.is_full() {
+        if self.is_full() && !self.buffer.grow(self.len.saturating_add(1)) {
             return Err(InsertError::Full(value));
         }
         // SAFETY: `index <= len < capacity`, so `index..len + 1` is inside
@@ -251,7 +307,8 @@ impl<T, S: Storage<T>> Vector<T, S> {
     /// "grows": get a bigger block, then move into it. It can also change
     /// the kind of storage, for example from borrowed to inline.
     ///
-    /// Hands the vector back unchanged when `buffer` is too small.
+    /// Hands the vector back unchanged when `buffer` is too small (for
+    /// `Dynamic`, when the allocator refuses).
     #[inline]
     pub fn move_into<B>(mut self, buffer: B) -> Result<Vector<T, B::Storage>, Full<Self>>
     where
@@ -259,10 +316,10 @@ impl<T, S: Storage<T>> Vector<T, S> {
     {
         let len = self.len;
         let mut buffer = buffer.into_buffer();
-        let slots = buffer.slots_mut();
-        if slots.len() < len {
+        if buffer.slots().len() < len && !buffer.grow(len) {
             return Err(Full(self));
         }
+        let slots = buffer.slots_mut();
         // SAFETY: the source holds `len` initialised elements and the
         // destination has room for at least `len`. They are two separate
         // buffers, so they cannot overlap. Setting `self.len` to zero

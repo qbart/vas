@@ -6,6 +6,7 @@
 extern crate alloc;
 
 pub mod aabb;
+pub mod allocator;
 pub mod arena;
 pub mod binary_tree;
 pub mod bitset;
@@ -30,6 +31,9 @@ pub mod tree;
 pub mod vector;
 
 pub use aabb::Aabb;
+pub use allocator::Allocator;
+#[cfg(feature = "alloc")]
+pub use allocator::Global;
 pub use arena::Arena;
 pub use binary_tree::BinaryTree;
 pub use bitset::Bitset;
@@ -51,6 +55,6 @@ pub use pool::{Handle, Pool};
 pub use random::Rng;
 pub use spatial_grid::SpatialGrid;
 pub use static_graph::StaticGraph;
-pub use storage::{Borrowed, Inline};
+pub use storage::{Borrowed, Dynamic, Inline};
 pub use tree::Tree;
 pub use vector::Vector;

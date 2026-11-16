@@ -9,16 +9,17 @@ use core::mem::ManuallyDrop;
 use core::mem::MaybeUninit;
 #[cfg(feature = "alloc")]
 use core::ops::{Deref, DerefMut};
-#[cfg(feature = "alloc")]
 use core::ptr::NonNull;
 use core::slice;
 #[cfg(target_has_atomic = "8")]
 use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(feature = "alloc")]
-use alloc::alloc::{Layout, alloc, dealloc};
+use alloc::alloc::{alloc, dealloc};
+use core::alloc::Layout;
 
 use crate::Full;
+use crate::allocator::Allocator;
 
 /// Hands out pieces of one block of memory, so that many containers and
 /// values can be packed into it.
@@ -102,26 +103,45 @@ impl<'a> Arena<'a> {
     /// The memory is uninitialised; pass it to a container's `new`. Fails
     /// without changing the arena when it does not fit.
     pub fn alloc<T>(&self, count: usize) -> Result<&'a mut [MaybeUninit<T>], Full<()>> {
+        let size = size_of::<T>().checked_mul(count).ok_or(Full(()))?;
+        let begin = self.bump(size, align_of::<T>())?;
+        // SAFETY: `bump` returned the start of `size` bytes inside the
+        // block, aligned for `T`, that overlap no other piece. The block is
+        // exclusively borrowed for `'a`, and `MaybeUninit<T>` needs no
+        // initialisation.
+        Ok(unsafe {
+            slice::from_raw_parts_mut(self.start.add(begin).cast::<MaybeUninit<T>>(), count)
+        })
+    }
+
+    /// Reserves the next `size` bytes aligned to `align` (a power of two)
+    /// and returns their offset in the block. Fails without changing the
+    /// arena when they do not fit.
+    ///
+    /// The returned range lies inside the block and overlaps no piece that
+    /// is still in use.
+    #[inline]
+    fn bump(&self, size: usize, align: usize) -> Result<usize, Full<()>> {
         let used = self.used.get();
         // Padding to reach the next address that is a multiple of the
-        // alignment (always a power of two).
+        // alignment.
         let address = self.start.addr().wrapping_add(used);
-        let padding = address.wrapping_neg() & (align_of::<T>() - 1);
-        let size = size_of::<T>().checked_mul(count).ok_or(Full(()))?;
+        let padding = address.wrapping_neg() & (align - 1);
         let begin = used.checked_add(padding).ok_or(Full(()))?;
         let end = begin.checked_add(size).ok_or(Full(()))?;
         if end > self.capacity {
             return Err(Full(()));
         }
         self.used.set(end);
-        // SAFETY: `begin..end` lies inside the block, starts at an address
-        // aligned for `T`, and has room for `count` values. `used` only ever
-        // advances, so this range is handed out exactly once and overlaps no
-        // other piece. The block is exclusively borrowed for `'a`, and
-        // `MaybeUninit<T>` needs no initialisation.
-        Ok(unsafe {
-            slice::from_raw_parts_mut(self.start.add(begin).cast::<MaybeUninit<T>>(), count)
-        })
+        Ok(begin)
+    }
+
+    /// Offset in the block of `piece`, when its `size` bytes are the most
+    /// recently handed out ones.
+    #[inline]
+    fn offset_of_last(&self, piece: NonNull<u8>, size: usize) -> Option<usize> {
+        let offset = piece.addr().get().checked_sub(self.start.addr())?;
+        (offset.checked_add(size)? == self.used.get()).then_some(offset)
     }
 
     /// Stores one value in the arena and returns a reference to it, or hands
@@ -151,6 +171,71 @@ impl<'a> Arena<'a> {
     #[inline]
     pub fn sub(&self, bytes: usize) -> Result<Arena<'a>, Full<()>> {
         self.alloc::<u8>(bytes).map(Arena::new)
+    }
+}
+
+/// An arena is an [`Allocator`]: containers with
+/// [`Dynamic`](crate::Dynamic) storage can grow inside it.
+///
+/// Memory comes back only in reverse order: freeing or growing the most
+/// recently handed out piece reuses its space, and a piece that is no
+/// longer the last one is left behind when its container grows or is
+/// dropped. This suits arenas that are thrown away as a whole, such as one
+/// per frame or per level.
+///
+/// ```
+/// use vas::{Arena, Dynamic, Memory, Vector};
+///
+/// let mut block = Memory::<u8, 4096>::new();
+/// let arena = Arena::new(&mut block);
+/// let mut visible = Vector::new(Dynamic(&arena));
+/// for id in 0..500u32 {
+///     assert!(visible.push(id).is_ok());
+/// }
+/// assert_eq!(arena.used(), visible.capacity() * 4);
+/// ```
+// SAFETY: blocks are distinct ranges of the arena's block, handed out by
+// `bump`, which never returns bytes that are still in use: `used` moves
+// back only over the piece being freed. The memory belongs to the borrowed
+// block, not to the arena value, so moving the arena does not move it.
+unsafe impl Allocator for Arena<'_> {
+    #[inline]
+    fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, Full<()>> {
+        let begin = self.bump(layout.size(), layout.align())?;
+        // SAFETY: `begin` is an offset inside the block, so the address is
+        // in bounds of it and not null.
+        Ok(unsafe { NonNull::new_unchecked(self.start.add(begin)) })
+    }
+
+    #[inline]
+    unsafe fn free(&self, block: NonNull<u8>, layout: Layout) {
+        // The last piece can be handed out again; the caller promises not
+        // to use it any more.
+        if let Some(offset) = self.offset_of_last(block, layout.size()) {
+            self.used.set(offset);
+        }
+    }
+
+    #[inline]
+    unsafe fn grow(
+        &self,
+        block: NonNull<u8>,
+        old: Layout,
+        new: Layout,
+    ) -> Result<NonNull<u8>, Full<()>> {
+        // The last piece grows in place when the block has room.
+        if let Some(offset) = self.offset_of_last(block, old.size())
+            && let Some(end) = offset.checked_add(new.size())
+            && end <= self.capacity
+        {
+            self.used.set(end);
+            return Ok(block);
+        }
+        let grown = self.allocate(new)?;
+        // SAFETY: the caller guarantees `block` is valid for `old.size()`
+        // bytes; `grown` is a different piece of at least that size.
+        unsafe { core::ptr::copy_nonoverlapping(block.as_ptr(), grown.as_ptr(), old.size()) };
+        Ok(grown)
     }
 }
 
