@@ -230,6 +230,8 @@ impl<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>>> Orthtree<T, 
             *half *= 0.5;
         }
         let mut nodes = Vector::new(nodes);
+        // Dynamic storage starts empty: get room for the root.
+        let _ = nodes.reserve(1);
         let usable = nodes.capacity().min((u32::MAX - 1) as usize);
         if usable == 0 {
             return Err(NewError::Full);
@@ -557,7 +559,14 @@ impl<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>>> Orthtree<T, 
         } else {
             let end = self.used.checked_add(Self::CHILDREN)?;
             if end as usize > self.nodes.len() {
-                return None;
+                // Out of nodes: grow dynamic storage and put everything it
+                // gave to use. Fixed storage fails here.
+                self.nodes.reserve(end as usize - self.nodes.len()).ok()?;
+                let usable = self.nodes.capacity().min((u32::MAX - 1) as usize);
+                self.nodes.resize(usable, Node::leaf(NONE)).ok()?;
+                if end as usize > self.nodes.len() {
+                    return None;
+                }
             }
             let block = self.used;
             self.used = end;

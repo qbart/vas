@@ -231,9 +231,7 @@ fn deque_push_overwrite_never_grows() {
     assert_eq!(history.push_overwrite(1u8), Some(1));
     assert_eq!(history.reserve(3), Ok(()));
     let capacity = history.capacity();
-    let evicted = (0..100u8)
-        .filter_map(|i| history.push_overwrite(i))
-        .count();
+    let evicted = (0..100u8).filter_map(|i| history.push_overwrite(i)).count();
     assert_eq!(history.capacity(), capacity);
     assert_eq!(evicted, 100 - capacity);
 }
@@ -418,7 +416,11 @@ fn spatial_structures_grow() {
     assert!(octree.is_ok());
     if let Ok(mut octree) = octree {
         for i in 0..200u32 {
-            let position = [(i % 8) as f32 + 0.5, (i / 8 % 8) as f32 + 0.5, (i / 64) as f32];
+            let position = [
+                (i % 8) as f32 + 0.5,
+                (i / 8 % 8) as f32 + 0.5,
+                (i / 64) as f32,
+            ];
             assert!(octree.insert(position, i).is_ok());
         }
         assert_eq!(octree.len(), 200);
@@ -508,7 +510,10 @@ mod global {
         }
         assert!(world.decisions.set_root(1).is_ok());
         assert_eq!(world.enemies.len(), 2000);
-        assert_eq!(world.names.get(&1999).map(String::as_str), Some("name 1999"));
+        assert_eq!(
+            world.names.get(&1999).map(String::as_str),
+            Some("name 1999")
+        );
         assert_eq!(world.events.front(), Some(&0));
         assert_eq!(world.queue.peek(), Some(&1999));
         assert_eq!(world.scores.last(), Some((&1999, &1999)));

@@ -4,8 +4,9 @@
 use core::fmt;
 
 use crate::Full;
+use crate::allocator::Allocator;
 use crate::pool::{self, Handle, Pool};
-use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
 
 /// "No node" in a link.
 const NONE: u32 = u32::MAX;
@@ -129,6 +130,14 @@ impl<T, const N: usize> Default for Tree<T, Inline<N>> {
     #[inline]
     fn default() -> Self {
         Self::inline()
+    }
+}
+
+impl<T, A: Allocator + Default> Default for Tree<T, Dynamic<A>> {
+    /// Creates an empty tree that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(A::default()))
     }
 }
 

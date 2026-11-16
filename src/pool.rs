@@ -8,7 +8,8 @@ use core::mem::MaybeUninit;
 use core::{fmt, hash, slice};
 
 use crate::Full;
-use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 
 /// Marks the end of the free list. Never a valid slot index, because the
 /// capacity is capped at `u32::MAX`.
@@ -157,6 +158,14 @@ impl<T, const N: usize> Default for Pool<T, Inline<N>> {
     }
 }
 
+impl<T, A: Allocator + Default> Default for Pool<T, Dynamic<A>> {
+    /// Creates an empty pool that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(A::default()))
+    }
+}
+
 impl<T, S: Storage<Slot<T>>> Pool<T, S> {
     /// Creates an empty pool on `buffer`: a reference to memory borrows it,
     /// a `Memory` passed by value is stored inside the pool.
@@ -182,7 +191,8 @@ impl<T, S: Storage<Slot<T>>> Pool<T, S> {
         self.len as usize
     }
 
-    /// Maximum number of values the pool can hold.
+    /// Number of values the pool can hold without growing. For borrowed
+    /// and inline storage this is the maximum.
     #[inline]
     pub fn capacity(&self) -> usize {
         let slots = self.buffer.slots().len();
@@ -199,14 +209,30 @@ impl<T, S: Storage<Slot<T>>> Pool<T, S> {
         self.len == 0
     }
 
-    /// `true` when the next insert would fail.
+    /// `true` when the next insert needs more memory: it fails with
+    /// borrowed and inline storage, and grows with dynamic storage.
     #[inline]
     pub fn is_full(&self) -> bool {
         self.free_head == NONE && self.initialized as usize >= self.capacity()
     }
 
-    /// Stores `value` and returns its handle, or hands the value back in
-    /// [`Full`] when there is no room.
+    /// Makes sure `additional` more values fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        match self.len().checked_add(additional) {
+            Some(capacity) if capacity <= self.capacity() => Ok(()),
+            Some(capacity) if capacity <= NONE as usize && self.buffer.grow(capacity) => Ok(()),
+            _ => Err(Full(())),
+        }
+    }
+
+    /// Stores `value` and returns its handle. With dynamic storage the pool
+    /// grows when needed; handles stay valid.
+    ///
+    /// Hands the value back in [`Full`] when there is no room: the storage
+    /// is fixed and full, or the allocator refused.
     #[inline]
     pub fn insert(&mut self, value: T) -> Result<Handle<T>, Full<T>> {
         let index = self.free_head;
@@ -226,6 +252,10 @@ impl<T, S: Storage<Slot<T>>> Pool<T, S> {
         let index = self.initialized;
         if index == NONE {
             return Err(Full(value));
+        }
+        if index as usize >= self.buffer.slots().len() {
+            // No slot left: grow, or fail below when that is not possible.
+            let _ = self.buffer.grow(index as usize + 1);
         }
         match self.buffer.slots_mut().get_mut(index as usize) {
             Some(raw) => {

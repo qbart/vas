@@ -7,7 +7,8 @@ use core::mem::MaybeUninit;
 use core::{fmt, slice};
 
 use crate::OutOfBounds;
-use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 
 const BITS: usize = u64::BITS as usize;
 
@@ -60,6 +61,14 @@ impl<const N: usize> Default for Bitset<Inline<N>> {
     }
 }
 
+impl<A: Allocator + Default> Default for Bitset<Dynamic<A>> {
+    /// Creates an empty set that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(A::default()))
+    }
+}
+
 impl<S: Storage<u64>> Bitset<S> {
     /// Creates a set with every bit clear on `buffer`: a reference to
     /// memory borrows it, a `Memory` passed by value is stored inside the
@@ -101,7 +110,37 @@ impl<S: Storage<u64>> Bitset<S> {
         }
     }
 
-    /// Number of bits the set has room for.
+    /// The word holding bit `index`. With dynamic storage the set grows to
+    /// reach it; with fixed storage an index past the end is `None`.
+    #[inline]
+    fn word_mut(&mut self, index: usize) -> Option<&mut u64> {
+        let word = index / BITS;
+        if word >= self.used && !self.grow(word + 1) {
+            return None;
+        }
+        self.words_mut().get_mut(word)
+    }
+
+    /// Grows the storage to at least `words` words, all new bits clear.
+    /// Returns `false`, with nothing changed, when the storage cannot grow.
+    #[cold]
+    fn grow(&mut self, words: usize) -> bool {
+        if words > usize::MAX / BITS || !self.buffer.grow(words) {
+            return false;
+        }
+        let slots = self.buffer.slots_mut();
+        let used = slots.len().min(usize::MAX / BITS);
+        if let Some(fresh) = slots.get_mut(self.used..used) {
+            for word in fresh {
+                word.write(0);
+            }
+            self.used = used;
+        }
+        true
+    }
+
+    /// Number of bits the set has room for. With dynamic storage, setting
+    /// a higher bit grows the set.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.words().len() * BITS
@@ -138,9 +177,13 @@ impl<S: Storage<u64>> Bitset<S> {
     }
 
     /// Sets bit `index`. Returns `true` when it was clear before.
+    ///
+    /// With dynamic storage the set grows to hold the bit. Reports
+    /// [`OutOfBounds`] when the index is past the end of fixed storage, or
+    /// when the allocator refuses.
     #[inline]
     pub fn insert(&mut self, index: usize) -> Result<bool, OutOfBounds> {
-        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
+        let word = self.word_mut(index).ok_or(OutOfBounds)?;
         let was_clear = *word & mask(index) == 0;
         *word |= mask(index);
         Ok(was_clear)
@@ -160,10 +203,14 @@ impl<S: Storage<u64>> Bitset<S> {
         }
     }
 
-    /// Sets bit `index` to `value`.
+    /// Sets bit `index` to `value`. With dynamic storage, setting a bit
+    /// past the end grows the set, and clearing one changes nothing.
     #[inline]
     pub fn set(&mut self, index: usize, value: bool) -> Result<(), OutOfBounds> {
-        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
+        if !value && <S::Buffer as Buffer<u64>>::GROWS && index / BITS >= self.used {
+            return Ok(());
+        }
+        let word = self.word_mut(index).ok_or(OutOfBounds)?;
         if value {
             *word |= mask(index);
         } else {
@@ -172,10 +219,11 @@ impl<S: Storage<u64>> Bitset<S> {
         Ok(())
     }
 
-    /// Flips bit `index` and returns its new value.
+    /// Flips bit `index` and returns its new value. With dynamic storage
+    /// the set grows to hold the bit.
     #[inline]
     pub fn toggle(&mut self, index: usize) -> Result<bool, OutOfBounds> {
-        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
+        let word = self.word_mut(index).ok_or(OutOfBounds)?;
         *word ^= mask(index);
         Ok(*word & mask(index) != 0)
     }
@@ -212,10 +260,19 @@ impl<S: Storage<u64>> Bitset<S> {
             .map(|(index, word)| index * BITS + word.trailing_ones() as usize)
     }
 
-    /// Sets every bit that is set in `other`. Bits beyond this set's
-    /// capacity are ignored.
+    /// Sets every bit that is set in `other`. With dynamic storage the
+    /// set grows to hold them; bits beyond the capacity of a set that
+    /// cannot grow are ignored.
     #[inline]
     pub fn union_with<O: Storage<u64>>(&mut self, other: &Bitset<O>) {
+        if <S::Buffer as Buffer<u64>>::GROWS {
+            let needed = other.words().iter().rposition(|word| *word != 0);
+            if let Some(last) = needed
+                && last >= self.used
+            {
+                let _ = self.grow(last + 1);
+            }
+        }
         for (word, theirs) in self.words_mut().iter_mut().zip(other.words().iter()) {
             *word |= theirs;
         }

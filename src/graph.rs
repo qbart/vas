@@ -3,9 +3,10 @@
 use core::fmt;
 
 use crate::Full;
+use crate::allocator::Allocator;
 use crate::path::Space;
 use crate::pool::{self, Handle, Pool};
-use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
 
 /// "No edge" in a link.
 const NONE: u32 = u32::MAX;
@@ -139,6 +140,18 @@ impl<N, E, const NODES: usize, const EDGES: usize> Default
     #[inline]
     fn default() -> Self {
         Self::inline()
+    }
+}
+
+impl<N, E, AN, AE> Default for Graph<N, E, Dynamic<AN>, Dynamic<AE>>
+where
+    AN: Allocator + Default,
+    AE: Allocator + Default,
+{
+    /// Creates an empty graph that grows through the default allocators.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(AN::default()), Dynamic(AE::default()))
     }
 }
 

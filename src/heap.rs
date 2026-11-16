@@ -7,7 +7,8 @@ use core::fmt;
 use core::mem::ManuallyDrop;
 use core::ptr;
 
-use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// Decides which element a [`Heap`] hands out first: the one that compares
@@ -141,6 +142,14 @@ impl<T, O: Default, const N: usize> Default for Heap<T, Inline<N>, O> {
     }
 }
 
+impl<T, A: Allocator + Default, O: Default> Default for Heap<T, Dynamic<A>, O> {
+    /// Creates an empty heap that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::with_order(Dynamic(A::default()), O::default())
+    }
+}
+
 impl<T, S: Storage<T>, O> Heap<T, S, O> {
     /// Creates an empty heap that pops first whichever element `order`
     /// ranks greatest.
@@ -167,10 +176,18 @@ impl<T, S: Storage<T>, O> Heap<T, S, O> {
         self.items.capacity()
     }
 
-    /// Number of elements that can still be pushed.
+    /// Number of elements that can still be pushed without growing.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.items.remaining()
+    }
+
+    /// Makes sure `additional` more elements fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        self.items.reserve(additional)
     }
 
     /// `true` when the heap holds no elements.
@@ -206,7 +223,10 @@ impl<T, S: Storage<T>, O> Heap<T, S, O> {
 }
 
 impl<T, S: Storage<T>, O: Order<T>> Heap<T, S, O> {
-    /// Adds `value`, or hands it back in [`Full`] when there is no room.
+    /// Adds `value`. With dynamic storage the heap grows when needed.
+    ///
+    /// Hands the value back in [`Full`] when there is no room: the storage
+    /// is fixed and full, or the allocator refused.
     #[inline]
     pub fn push(&mut self, value: T) -> Result<(), Full<T>> {
         self.items.push(value)?;

@@ -5,11 +5,12 @@
 use core::borrow::Borrow;
 use core::hash::{BuildHasher, BuildHasherDefault, Hash};
 use core::mem::{self, MaybeUninit};
-use core::{fmt, slice};
+use core::{fmt, ptr, slice};
 
 use crate::Full;
+use crate::allocator::Allocator;
 use crate::hash::FastState;
-use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
+use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 
 /// `meta` of a slot that holds no entry.
 const EMPTY: u32 = 0;
@@ -24,6 +25,13 @@ pub struct Slot<K, V> {
     // Both initialised exactly while `meta != EMPTY`.
     key: MaybeUninit<K>,
     value: MaybeUninit<V>,
+}
+
+/// Number of entries up to which a growable map of `capacity` slots is not
+/// yet crowded: 7/8 of the slots.
+#[inline]
+const fn roomy(capacity: usize) -> usize {
+    capacity - capacity / 8
 }
 
 /// The slot an entry with this `meta` would ideally live in.
@@ -113,6 +121,14 @@ impl<K, V, H: Default, const N: usize> Default for Map<K, V, Inline<N>, H> {
     }
 }
 
+impl<K, V, A: Allocator + Default, H: Default> Default for Map<K, V, Dynamic<A>, H> {
+    /// Creates an empty map that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::with_hasher(Dynamic(A::default()), H::default())
+    }
+}
+
 impl<K, V, S: Storage<Slot<K, V>>> Map<K, V, S> {
     /// Creates an empty map on `buffer`, with the default
     /// [`FastHasher`](crate::hash::FastHasher). A reference to memory
@@ -163,10 +179,83 @@ impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
         self.len
     }
 
-    /// Maximum number of entries the map can hold.
+    /// Number of slots: the maximum number of entries for borrowed and
+    /// inline storage. With dynamic storage the map grows before it is
+    /// this full (at 7/8).
     #[inline]
     pub const fn capacity(&self) -> usize {
         self.used
+    }
+
+    /// Makes sure `additional` more entries fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        let entries = self.len.checked_add(additional).ok_or(Full(()))?;
+        let crowded = <S::Buffer as Buffer<Slot<K, V>>>::GROWS && entries > roomy(self.used);
+        if entries <= self.used && !crowded {
+            return Ok(());
+        }
+        if self.grow(entries) && entries <= self.used {
+            Ok(())
+        } else {
+            Err(Full(()))
+        }
+    }
+
+    /// Moves the map to bigger storage, sized so that `entries` entries
+    /// leave it at most 7/8 full. Returns `false`, with nothing changed,
+    /// when the storage cannot grow.
+    #[cold]
+    fn grow(&mut self, entries: usize) -> bool {
+        let Some(slots) = entries.checked_add(entries / 7 + 1) else {
+            return false;
+        };
+        let old_used = self.used;
+        let mut used = old_used;
+        let grown = self.buffer.replace(slots, |old, new| {
+            used = new.len().min(u32::MAX as usize);
+            let Some(new) = new.get_mut(..used) else {
+                return;
+            };
+            for slot in new.iter_mut() {
+                slot.write(Slot {
+                    meta: EMPTY,
+                    key: MaybeUninit::uninit(),
+                    value: MaybeUninit::uninit(),
+                });
+            }
+            // SAFETY: every slot of `new` was just initialised, and
+            // `MaybeUninit<Slot>` has the layout of `Slot`.
+            let new = unsafe {
+                slice::from_raw_parts_mut(new.as_mut_ptr().cast::<Slot<K, V>>(), new.len())
+            };
+            // SAFETY: the first `old_used` slots of the old storage are
+            // initialised `Slot`s by the map's invariant.
+            let old = unsafe { slice::from_raw_parts(old.as_ptr().cast::<Slot<K, V>>(), old_used) };
+            // The stored hash bits place each entry; no key is hashed again.
+            for entry in old.iter().filter(|slot| slot.meta != EMPTY) {
+                let mut index = home(entry.meta, used);
+                for _ in 0..used {
+                    let Some(slot) = new.get_mut(index) else {
+                        break;
+                    };
+                    if slot.meta == EMPTY {
+                        // SAFETY: both are valid, distinct slots. The entry
+                        // is moved bit by bit; the old storage is given up
+                        // without being read or dropped, so the new slot
+                        // becomes the only owner of key and value.
+                        unsafe { ptr::copy_nonoverlapping(entry, slot, 1) };
+                        break;
+                    }
+                    index = next(index, used);
+                }
+            }
+        });
+        if grown {
+            self.used = used;
+        }
+        grown
     }
 
     /// `true` when the map holds no entries.
@@ -224,8 +313,49 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
     /// Returns `Ok(Some(old))` when the key was already present (the value
     /// is replaced, the existing key is kept), `Ok(None)` when it is new, and
     /// hands both back in [`Full`] when the key is new and there is no room.
+    ///
+    /// With dynamic storage the map grows when it gets more than 7/8 full,
+    /// so there is no room only when the allocator refuses and every slot
+    /// is taken.
     pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>, Full<(K, V)>> {
         let meta = self.meta_for(&key);
+        let capacity = self.used;
+        let mut index = home(meta, capacity);
+        for _ in 0..capacity {
+            let Some(slot) = live_mut(&mut self.buffer, self.used).get_mut(index) else {
+                break;
+            };
+            if slot.meta == EMPTY {
+                if <S::Buffer as Buffer<Slot<K, V>>>::GROWS && self.len >= roomy(capacity) {
+                    // The key is new and the map is crowded: grow first.
+                    break;
+                }
+                slot.key.write(key);
+                slot.value.write(value);
+                slot.meta = meta;
+                self.len += 1;
+                return Ok(None);
+            }
+            // SAFETY: the slot is occupied, so its key is initialised.
+            if slot.meta == meta && *unsafe { slot.key.assume_init_ref() } == key {
+                // SAFETY: the slot is occupied, so its value is initialised.
+                let old = mem::replace(unsafe { slot.value.assume_init_mut() }, value);
+                return Ok(Some(old));
+            }
+            index = next(index, capacity);
+        }
+        self.insert_new(meta, key, value)
+    }
+
+    /// Inserts an entry whose key is known to be absent, after trying to
+    /// grow the storage.
+    #[cold]
+    fn insert_new(&mut self, meta: u32, key: K, value: V) -> Result<Option<V>, Full<(K, V)>> {
+        // When growing fails the entry may still fit in the slots there
+        // are: a map that cannot grow fills up completely.
+        if !self.grow(self.len.saturating_add(1)) && self.len >= self.used {
+            return Err(Full((key, value)));
+        }
         let capacity = self.used;
         let mut index = home(meta, capacity);
         for _ in 0..capacity {
@@ -238,12 +368,6 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
                 slot.meta = meta;
                 self.len += 1;
                 return Ok(None);
-            }
-            // SAFETY: the slot is occupied, so its key is initialised.
-            if slot.meta == meta && *unsafe { slot.key.assume_init_ref() } == key {
-                // SAFETY: the slot is occupied, so its value is initialised.
-                let old = mem::replace(unsafe { slot.value.assume_init_mut() }, value);
-                return Ok(Some(old));
             }
             index = next(index, capacity);
         }

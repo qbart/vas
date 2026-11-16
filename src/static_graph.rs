@@ -101,6 +101,9 @@ impl<E: Copy, SO: Storage<u32>, SE: Storage<Edge<E>>> StaticGraph<E, SO, SE> {
             .map_err(|_| BuildError::Full)?;
         let offsets = offsets_vector.as_mut_slice();
         let mut edges_vector = Vector::new(edges);
+        edges_vector
+            .reserve(input.len())
+            .map_err(|_| BuildError::Full)?;
         let edges = edges_vector
             .slots_mut()
             .get_mut(..input.len())

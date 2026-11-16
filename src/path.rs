@@ -3,8 +3,9 @@
 use core::cmp::Ordering;
 use core::fmt;
 
+use crate::allocator::Allocator;
 use crate::heap::{Heap, Order};
-use crate::storage::{IntoBuffer, Storage};
+use crate::storage::{Dynamic, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// The thing being searched: anything that can list the neighbours of a
@@ -127,6 +128,36 @@ pub struct PathFinder<SN: Storage<Node>, SO: Storage<Open> = SN> {
     found: Option<(u32, u32)>,
 }
 
+impl<AN, AO> Default for PathFinder<Dynamic<AN>, Dynamic<AO>>
+where
+    AN: Allocator + Default,
+    AO: Allocator + Default,
+{
+    /// Creates a finder that grows through the default allocators.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(AN::default()), Dynamic(AO::default()))
+    }
+}
+
+/// A node no search has reached yet.
+const UNSEEN: Node = Node {
+    stamp: 0,
+    parent: 0,
+    cost: 0.0,
+};
+
+/// The search state of node `index`. With dynamic storage the node memory
+/// grows to reach it; with fixed storage an index past the end is `None`.
+#[inline]
+fn node_mut<S: Storage<Node>>(nodes: &mut Vector<Node, S>, index: u32) -> Option<&mut Node> {
+    let index = index as usize;
+    if index >= nodes.len() {
+        nodes.resize_with(index.checked_add(1)?, || UNSEEN).ok()?;
+    }
+    nodes.get_mut(index)
+}
+
 impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
     /// Creates a finder for a space of `nodes.len()` nodes, with `open` as
     /// the memory for its open list.
@@ -148,11 +179,7 @@ impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
         let mut nodes = Vector::new(nodes);
         let capacity = nodes.capacity();
         // Cannot fail: the length asked for is the capacity.
-        let _ = nodes.resize_with(capacity, || Node {
-            stamp: 0,
-            parent: 0,
-            cost: 0.0,
-        });
+        let _ = nodes.resize_with(capacity, || UNSEEN);
         Self {
             nodes,
             open: Heap::with_order(open, Cheapest),
@@ -161,10 +188,21 @@ impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
         }
     }
 
-    /// Number of nodes the finder has memory for.
+    /// Number of nodes the finder has memory for. With dynamic storage it
+    /// grows to the highest node a search touches.
     #[inline]
     pub const fn node_capacity(&self) -> usize {
         self.nodes.len()
+    }
+
+    /// Makes sure there is memory for `nodes` nodes, growing dynamic
+    /// storage when needed. Fails without changes when the storage is fixed
+    /// and too small, or when the allocator refuses.
+    pub fn reserve(&mut self, nodes: usize) -> Result<(), Full<()>> {
+        if nodes <= self.nodes.len() {
+            return Ok(());
+        }
+        self.nodes.resize_with(nodes, || UNSEEN)
     }
 
     /// Finds the cheapest path from `start` to `goal` and returns its cost.
@@ -178,13 +216,10 @@ impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
         self.next_stamp();
         let stamp = self.stamp;
 
-        if goal as usize >= self.nodes.len() {
+        if node_mut(&mut self.nodes, goal).is_none() {
             return Err(PathError::OutOfBounds);
         }
-        let first = self
-            .nodes
-            .get_mut(start as usize)
-            .ok_or(PathError::OutOfBounds)?;
+        let first = node_mut(&mut self.nodes, start).ok_or(PathError::OutOfBounds)?;
         *first = Node {
             stamp,
             parent: start,
@@ -209,14 +244,14 @@ impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
                 return Ok(current.cost);
             }
 
-            let nodes = &mut *self.nodes;
+            let nodes = &mut self.nodes;
             let open = &mut self.open;
             let mut error = None;
             space.neighbors(current.node, |next, step| {
                 if error.is_some() || !step.is_finite() || step < 0.0 {
                     return;
                 }
-                let Some(node) = nodes.get_mut(next as usize) else {
+                let Some(node) = node_mut(nodes, next) else {
                     error = Some(PathError::OutOfBounds);
                     return;
                 };

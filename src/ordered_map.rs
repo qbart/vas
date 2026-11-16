@@ -5,7 +5,8 @@ use core::mem;
 use core::ops::{Bound, RangeBounds};
 use core::{fmt, slice};
 
-use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// A fixed-capacity map that keeps its entries sorted by key, in memory
@@ -55,6 +56,14 @@ impl<K, V, const N: usize> Default for OrderedMap<K, V, Inline<N>> {
     }
 }
 
+impl<K, V, A: Allocator + Default> Default for OrderedMap<K, V, Dynamic<A>> {
+    /// Creates an empty map that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(A::default()))
+    }
+}
+
 impl<K, V, S: Storage<(K, V)>> OrderedMap<K, V, S> {
     /// Creates an empty map on `buffer`: a reference to memory borrows it,
     /// a `Memory` passed by value is stored inside the map.
@@ -80,10 +89,18 @@ impl<K, V, S: Storage<(K, V)>> OrderedMap<K, V, S> {
         self.entries.capacity()
     }
 
-    /// Number of entries that can still be inserted.
+    /// Number of entries that can still be inserted without growing.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.entries.remaining()
+    }
+
+    /// Makes sure `additional` more entries fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        self.entries.reserve(additional)
     }
 
     /// `true` when the map holds no entries.

@@ -7,7 +7,8 @@ use core::mem::MaybeUninit;
 use core::{fmt, ptr, slice};
 
 use crate::Full;
-use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
+use crate::allocator::Allocator;
+use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 
 /// Iterator over the elements of a [`Deque`], front to back.
 pub type Iter<'d, T> = Chain<slice::Iter<'d, T>, slice::Iter<'d, T>>;
@@ -62,6 +63,14 @@ impl<T, const N: usize> Default for Deque<T, Inline<N>> {
     }
 }
 
+impl<T, A: Allocator + Default> Default for Deque<T, Dynamic<A>> {
+    /// Creates an empty deque that grows through `A::default()`.
+    #[inline]
+    fn default() -> Self {
+        Self::new(Dynamic(A::default()))
+    }
+}
+
 impl<T, S: Storage<T>> Deque<T, S> {
     /// Creates an empty deque on `buffer`: a reference to memory borrows it,
     /// a `Memory` passed by value is stored inside the deque.
@@ -83,13 +92,14 @@ impl<T, S: Storage<T>> Deque<T, S> {
         self.len
     }
 
-    /// Maximum number of elements the deque can hold.
+    /// Number of elements the deque can hold without growing. For borrowed
+    /// and inline storage this is the maximum.
     #[inline]
     pub fn capacity(&self) -> usize {
         self.buffer.slots().len()
     }
 
-    /// Number of elements that can still be pushed.
+    /// Number of elements that can still be pushed without growing.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.buffer.slots().len() - self.len
@@ -101,17 +111,61 @@ impl<T, S: Storage<T>> Deque<T, S> {
         self.len == 0
     }
 
-    /// `true` when no more elements can be pushed.
+    /// `true` when the next push needs more memory: it fails with borrowed
+    /// and inline storage, and grows with dynamic storage.
     #[inline]
     pub fn is_full(&self) -> bool {
         self.len == self.buffer.slots().len()
     }
 
-    /// Appends `value` at the back, or hands it back in [`Full`] when there
-    /// is no room.
+    /// Makes sure `additional` more elements fit, growing dynamic storage
+    /// when needed. Fails without changes when the storage is fixed and too
+    /// small, or when the allocator refuses.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) -> Result<(), Full<()>> {
+        match self.len.checked_add(additional) {
+            Some(capacity) if capacity <= self.capacity() || self.grow(capacity) => Ok(()),
+            _ => Err(Full(())),
+        }
+    }
+
+    /// Grows the storage to at least `capacity` slots and puts the contents
+    /// back into ring order. Returns `false`, with nothing changed, when
+    /// the storage cannot grow.
+    #[cold]
+    fn grow(&mut self, capacity: usize) -> bool {
+        let old = self.buffer.slots().len();
+        if !self.buffer.grow(capacity) {
+            return false;
+        }
+        let slots = self.buffer.slots_mut();
+        // Elements that sat between the front and the old end of the block.
+        let until_end = old - self.head;
+        if self.len > until_end {
+            // The contents wrapped around the old end. Move the front piece
+            // to the new end, so that the block wraps there instead.
+            let head = slots.len() - until_end;
+            let base = slots.as_mut_ptr();
+            // SAFETY: `self.head + until_end == old` and
+            // `head + until_end == slots.len()`, so both ranges are inside
+            // the block. They may overlap, which `ptr::copy` allows. The
+            // slots are moved as raw `MaybeUninit`, so nothing is dropped
+            // or duplicated: the old positions are no longer part of the
+            // ring once `self.head` is updated.
+            unsafe { ptr::copy(base.add(self.head), base.add(head), until_end) };
+            self.head = head;
+        }
+        true
+    }
+
+    /// Appends `value` at the back. With dynamic storage the deque grows
+    /// when needed.
+    ///
+    /// Hands the value back in [`Full`] when there is no room: the storage
+    /// is fixed and full, or the allocator refused.
     #[inline]
     pub fn push_back(&mut self, value: T) -> Result<(), Full<T>> {
-        if self.is_full() {
+        if self.is_full() && !self.grow(self.len.saturating_add(1)) {
             return Err(Full(value));
         }
         let index = self.physical(self.len);
@@ -125,11 +179,14 @@ impl<T, S: Storage<T>> Deque<T, S> {
         }
     }
 
-    /// Prepends `value` at the front, or hands it back in [`Full`] when
-    /// there is no room.
+    /// Prepends `value` at the front. With dynamic storage the deque grows
+    /// when needed.
+    ///
+    /// Hands the value back in [`Full`] when there is no room: the storage
+    /// is fixed and full, or the allocator refused.
     #[inline]
     pub fn push_front(&mut self, value: T) -> Result<(), Full<T>> {
-        if self.is_full() {
+        if self.is_full() && !self.grow(self.len.saturating_add(1)) {
             return Err(Full(value));
         }
         let head = if self.head == 0 {
@@ -153,6 +210,9 @@ impl<T, S: Storage<T>> Deque<T, S> {
     ///
     /// This turns the deque into a "keep the last N" history buffer. With a
     /// capacity of zero the value itself is returned.
+    ///
+    /// It never grows the deque, also with dynamic storage: `N` is the
+    /// current capacity (see [`reserve`](Self::reserve)).
     #[inline]
     pub fn push_overwrite(&mut self, value: T) -> Option<T> {
         let evicted = if self.is_full() {
