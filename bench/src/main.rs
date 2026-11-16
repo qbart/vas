@@ -72,7 +72,7 @@ fn deque() {
     let group = "queue 100k push+pop";
     let mut memory = block::<u64>(1024);
     bench(group, "vas::Deque", N, || {
-        let mut d = Deque::new(&mut memory);
+        let mut d = Deque::new(&mut memory[..]);
         let mut sum = 0;
         for i in 0..N as u64 {
             let _ = d.push_back(black_box(i));
@@ -102,7 +102,7 @@ fn heap() {
     let input = keys(N, 1);
     let mut memory = block::<u32>(N);
     bench(group, "vas::Heap", 2 * N, || {
-        let mut heap = Heap::new(&mut memory);
+        let mut heap = Heap::new(&mut memory[..]);
         for key in &input {
             let _ = heap.push(*key);
         }
@@ -135,13 +135,13 @@ fn map<const N: usize, const SLOTS: usize>() {
 
     let mut memory = block::<vas::map::Slot<u32, u32>>(SLOTS);
     bench(&insert, "vas::Map", N, || {
-        let mut map = Map::new(&mut memory);
+        let mut map = Map::new(&mut memory[..]);
         for key in &input {
             let _ = map.insert(*key, *key);
         }
         map.len() as u64
     });
-    let mut map = Map::new(&mut memory);
+    let mut map = Map::new(&mut memory[..]);
     for key in &input {
         let _ = map.insert(*key, *key);
     }
@@ -211,7 +211,7 @@ fn pool() {
     let mut memory = block::<vas::pool::Slot<u64>>(N);
     let mut handles = Vec::with_capacity(N);
     bench(group, "vas::Pool", 3 * N, || {
-        let mut pool = Pool::new(&mut memory);
+        let mut pool = Pool::new(&mut memory[..]);
         handles.clear();
         for i in 0..N as u64 {
             if let Ok(handle) = pool.insert(i) {
@@ -267,7 +267,7 @@ fn bitset() {
     let input = keys(100_000, 5);
     let mut memory = block::<u64>(BITS / 64);
     bench(group, "vas::Bitset", 200_000, || {
-        let mut bits = Bitset::new(&mut memory);
+        let mut bits = Bitset::new(&mut memory[..]);
         for key in &input {
             let _ = bits.insert(*key as usize % BITS);
         }

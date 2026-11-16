@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, ptr, slice};
 
 use crate::Full;
+use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
 
 /// Iterator over the elements of a [`Deque`], front to back.
 pub type Iter<'d, T> = Chain<slice::Iter<'d, T>, slice::Iter<'d, T>>;
@@ -31,21 +32,46 @@ pub type IterMut<'d, T> = Chain<slice::IterMut<'d, T>, slice::IterMut<'d, T>>;
 /// assert!(queue.push_back(2).is_ok());
 /// assert_eq!(queue.pop_front(), Some(1));
 /// ```
-pub struct Deque<'a, T> {
+pub struct Deque<T, S: Storage<T>> {
     // Invariant: `head < capacity` (or `head == 0` when the capacity is
     // zero), `len <= capacity`, and the `len` slots starting at `head`,
     // wrapping around the end of the storage, are initialised.
-    storage: &'a mut [MaybeUninit<T>],
+    buffer: S::Buffer,
     head: usize,
     len: usize,
 }
 
-impl<'a, T> Deque<'a, T> {
-    /// Creates an empty deque using `storage` as its memory.
+impl<T, const N: usize> Deque<T, Inline<N>> {
+    /// Creates an empty deque with room for `N` values inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
+    pub const fn inline() -> Self {
         Self {
-            storage,
+            buffer: [const { MaybeUninit::uninit() }; N],
+            head: 0,
+            len: 0,
+        }
+    }
+}
+
+impl<T, const N: usize> Default for Deque<T, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<T, S: Storage<T>> Deque<T, S> {
+    /// Creates an empty deque on `buffer`: a reference to memory borrows it,
+    /// a `Memory` passed by value is stored inside the deque.
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<T, Storage = S>,
+    {
+        Self {
+            buffer: buffer.into_buffer(),
             head: 0,
             len: 0,
         }
@@ -59,14 +85,14 @@ impl<'a, T> Deque<'a, T> {
 
     /// Maximum number of elements the deque can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
-        self.storage.len()
+    pub fn capacity(&self) -> usize {
+        self.buffer.slots().len()
     }
 
     /// Number of elements that can still be pushed.
     #[inline]
-    pub const fn remaining(&self) -> usize {
-        self.storage.len() - self.len
+    pub fn remaining(&self) -> usize {
+        self.buffer.slots().len() - self.len
     }
 
     /// `true` when the deque holds no elements.
@@ -77,8 +103,8 @@ impl<'a, T> Deque<'a, T> {
 
     /// `true` when no more elements can be pushed.
     #[inline]
-    pub const fn is_full(&self) -> bool {
-        self.len == self.storage.len()
+    pub fn is_full(&self) -> bool {
+        self.len == self.buffer.slots().len()
     }
 
     /// Appends `value` at the back, or hands it back in [`Full`] when there
@@ -89,7 +115,7 @@ impl<'a, T> Deque<'a, T> {
             return Err(Full(value));
         }
         let index = self.physical(self.len);
-        match self.storage.get_mut(index) {
+        match self.buffer.slots_mut().get_mut(index) {
             Some(slot) => {
                 slot.write(value);
                 self.len += 1;
@@ -107,11 +133,11 @@ impl<'a, T> Deque<'a, T> {
             return Err(Full(value));
         }
         let head = if self.head == 0 {
-            self.storage.len() - 1
+            self.buffer.slots().len() - 1
         } else {
             self.head - 1
         };
-        match self.storage.get_mut(head) {
+        match self.buffer.slots_mut().get_mut(head) {
             Some(slot) => {
                 slot.write(value);
                 self.head = head;
@@ -149,7 +175,7 @@ impl<'a, T> Deque<'a, T> {
         if self.len == 0 {
             return None;
         }
-        let slot = self.storage.get(self.head)?;
+        let slot = self.buffer.slots().get(self.head)?;
         // SAFETY: the deque is not empty, so the slot at `head` is
         // initialised. `head` and `len` are updated right after, so the
         // value is moved out exactly once.
@@ -165,7 +191,7 @@ impl<'a, T> Deque<'a, T> {
         if self.len == 0 {
             return None;
         }
-        let slot = self.storage.get(self.physical(self.len - 1))?;
+        let slot = self.buffer.slots().get(self.physical(self.len - 1))?;
         // SAFETY: the deque is not empty, so its last slot is initialised.
         // `len` is decremented right after, so the value is moved out
         // exactly once.
@@ -180,7 +206,7 @@ impl<'a, T> Deque<'a, T> {
         if index >= self.len {
             return None;
         }
-        let slot = self.storage.get(self.physical(index))?;
+        let slot = self.buffer.slots().get(self.physical(index))?;
         // SAFETY: `index < len`, so the slot is initialised.
         Some(unsafe { slot.assume_init_ref() })
     }
@@ -192,7 +218,7 @@ impl<'a, T> Deque<'a, T> {
             return None;
         }
         let index = self.physical(index);
-        let slot = self.storage.get_mut(index)?;
+        let slot = self.buffer.slots_mut().get_mut(index)?;
         // SAFETY: the logical index was below `len`, so the slot is
         // initialised.
         Some(unsafe { slot.assume_init_mut() })
@@ -227,7 +253,7 @@ impl<'a, T> Deque<'a, T> {
     #[inline]
     pub fn as_slices(&self) -> (&[T], &[T]) {
         let (first_len, second_len) = self.split_lens();
-        let (wrapped, from_head) = match self.storage.split_at_checked(self.head) {
+        let (wrapped, from_head) = match self.buffer.slots().split_at_checked(self.head) {
             Some(parts) => parts,
             None => (&[][..], &[][..]),
         };
@@ -248,7 +274,7 @@ impl<'a, T> Deque<'a, T> {
     #[inline]
     pub fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
         let (first_len, second_len) = self.split_lens();
-        let (wrapped, from_head) = match self.storage.split_at_mut_checked(self.head) {
+        let (wrapped, from_head) = match self.buffer.slots_mut().split_at_mut_checked(self.head) {
             Some(parts) => parts,
             None => (&mut [][..], &mut [][..]),
         };
@@ -299,8 +325,8 @@ impl<'a, T> Deque<'a, T> {
     /// Storage index of the element `offset` places after the front.
     /// Requires `offset <= capacity`; never overflows.
     #[inline]
-    const fn physical(&self, offset: usize) -> usize {
-        let until_end = self.storage.len() - self.head;
+    fn physical(&self, offset: usize) -> usize {
+        let until_end = self.buffer.slots().len() - self.head;
         if offset < until_end {
             self.head + offset
         } else {
@@ -311,8 +337,8 @@ impl<'a, T> Deque<'a, T> {
     /// Lengths of the piece before the end of the block and the wrapped
     /// piece at its start.
     #[inline]
-    const fn split_lens(&self) -> (usize, usize) {
-        let until_end = self.storage.len() - self.head;
+    fn split_lens(&self) -> (usize, usize) {
+        let until_end = self.buffer.slots().len() - self.head;
         if self.len <= until_end {
             (self.len, 0)
         } else {
@@ -321,20 +347,20 @@ impl<'a, T> Deque<'a, T> {
     }
 }
 
-impl<T> Drop for Deque<'_, T> {
+impl<T, S: Storage<T>> Drop for Deque<T, S> {
     #[inline]
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Deque<'_, T> {
+impl<T: fmt::Debug, S: Storage<T>> fmt::Debug for Deque<T, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
 }
 
-impl<'d, T> IntoIterator for &'d Deque<'_, T> {
+impl<'d, T, S: Storage<T>> IntoIterator for &'d Deque<T, S> {
     type Item = &'d T;
     type IntoIter = Iter<'d, T>;
 
@@ -344,7 +370,7 @@ impl<'d, T> IntoIterator for &'d Deque<'_, T> {
     }
 }
 
-impl<'d, T> IntoIterator for &'d mut Deque<'_, T> {
+impl<'d, T, S: Storage<T>> IntoIterator for &'d mut Deque<T, S> {
     type Item = &'d mut T;
     type IntoIter = IterMut<'d, T>;
 

@@ -8,6 +8,7 @@ use core::{fmt, slice};
 use crate::Full;
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
+use crate::storage::Borrowed;
 
 /// "No node" / "no entry" in a link.
 const NONE: u32 = u32::MAX;
@@ -171,7 +172,7 @@ pub struct Orthtree<'a, T, const D: usize> {
     //   leaf; inner nodes have no entries of their own.
     // - `count` of every node is the number of entries in its subtree.
     nodes: &'a mut [Node],
-    entries: Pool<'a, Entry<T, D>>,
+    entries: Pool<Entry<T, D>, Borrowed<'a>>,
     root: Region<D>,
     bounds: Aabb<D>,
     leaf_size: u32,
@@ -263,7 +264,7 @@ impl<'a, T, const D: usize> Orthtree<'a, T, D> {
 
     /// Maximum number of entries the tree can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.entries.capacity()
     }
 
@@ -275,7 +276,7 @@ impl<'a, T, const D: usize> Orthtree<'a, T, D> {
 
     /// `true` when no more entries can be inserted.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.entries.is_full()
     }
 

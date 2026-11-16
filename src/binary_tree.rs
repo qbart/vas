@@ -1,10 +1,10 @@
 //! Fixed-capacity binary tree over user-provided memory.
 
 use core::fmt;
-use core::mem::MaybeUninit;
 
 use crate::Full;
 use crate::pool::{self, Handle, Pool};
+use crate::storage::{Inline, IntoBuffer, Storage};
 
 /// "No node" in a link.
 const NONE: u32 = u32::MAX;
@@ -97,19 +97,43 @@ enum Order {
 ///     assert_eq!(text, [Some(&"1"), Some(&"+"), Some(&"2")]);
 /// }
 /// ```
-pub struct BinaryTree<'a, T> {
+pub struct BinaryTree<T, S: Storage<Slot<T>>> {
     // Invariant: all links refer to live nodes and are consistent with each
     // other; every live node is reachable from `root`.
-    nodes: Pool<'a, Node<T>>,
+    nodes: Pool<Node<T>, S>,
     root: u32,
 }
 
-impl<'a, T> BinaryTree<'a, T> {
-    /// Creates an empty tree using `storage` as its memory.
+impl<T, const N: usize> BinaryTree<T, Inline<N>> {
+    /// Creates an empty tree with room for `N` nodes inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<Slot<T>>]) -> Self {
+    pub const fn inline() -> Self {
         Self {
-            nodes: Pool::new(storage),
+            nodes: Pool::inline(),
+            root: NONE,
+        }
+    }
+}
+
+impl<T, const N: usize> Default for BinaryTree<T, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<T, S: Storage<Slot<T>>> BinaryTree<T, S> {
+    /// Creates an empty tree on `buffer`: a reference to memory borrows it,
+    /// a `Memory` passed by value is stored inside the tree.
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<Slot<T>, Storage = S>,
+    {
+        Self {
+            nodes: Pool::new(buffer),
             root: NONE,
         }
     }
@@ -122,7 +146,7 @@ impl<'a, T> BinaryTree<'a, T> {
 
     /// Maximum number of nodes the tree can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.nodes.capacity()
     }
 
@@ -134,7 +158,7 @@ impl<'a, T> BinaryTree<'a, T> {
 
     /// `true` when no more nodes can be inserted.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.nodes.is_full()
     }
 
@@ -255,21 +279,21 @@ impl<'a, T> BinaryTree<'a, T> {
     /// Walks the subtree of `id`: each node, then its left subtree, then its
     /// right subtree.
     #[inline]
-    pub fn pre_order(&self, id: NodeId<T>) -> Walk<'_, 'a, T> {
+    pub fn pre_order(&self, id: NodeId<T>) -> Walk<'_, T, S> {
         self.walk(id, Order::Pre)
     }
 
     /// Walks the subtree of `id`: left subtree, then the node, then its
     /// right subtree.
     #[inline]
-    pub fn in_order(&self, id: NodeId<T>) -> Walk<'_, 'a, T> {
+    pub fn in_order(&self, id: NodeId<T>) -> Walk<'_, T, S> {
         self.walk(id, Order::In)
     }
 
     /// Walks the subtree of `id`: left subtree, right subtree, then the
     /// node. Children always come before their parent.
     #[inline]
-    pub fn post_order(&self, id: NodeId<T>) -> Walk<'_, 'a, T> {
+    pub fn post_order(&self, id: NodeId<T>) -> Walk<'_, T, S> {
         self.walk(id, Order::Post)
     }
 
@@ -288,7 +312,7 @@ impl<'a, T> BinaryTree<'a, T> {
             .map(|(id, node)| (id, &mut node.value))
     }
 
-    fn walk(&self, id: NodeId<T>, order: Order) -> Walk<'_, 'a, T> {
+    fn walk(&self, id: NodeId<T>, order: Order) -> Walk<'_, T, S> {
         let top = if self.nodes.contains(id) {
             id.index()
         } else {
@@ -407,14 +431,14 @@ impl<'a, T> BinaryTree<'a, T> {
 /// [`BinaryTree::post_order`].
 ///
 /// Needs no extra memory: it follows the parent links.
-pub struct Walk<'t, 'a, T> {
-    tree: &'t BinaryTree<'a, T>,
+pub struct Walk<'t, T, S: Storage<Slot<T>>> {
+    tree: &'t BinaryTree<T, S>,
     top: u32,
     next: u32,
     order: Order,
 }
 
-impl<T> Walk<'_, '_, T> {
+impl<T, S: Storage<Slot<T>>> Walk<'_, T, S> {
     /// The node that follows `current` in the walk.
     fn after(&self, current: u32) -> u32 {
         let tree = self.tree;
@@ -479,7 +503,7 @@ impl<T> Walk<'_, '_, T> {
     }
 }
 
-impl<T> Iterator for Walk<'_, '_, T> {
+impl<T, S: Storage<Slot<T>>> Iterator for Walk<'_, T, S> {
     type Item = NodeId<T>;
 
     #[inline]

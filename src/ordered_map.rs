@@ -1,11 +1,12 @@
 //! Fixed-capacity ordered map over user-provided memory.
 
 use core::borrow::Borrow;
-use core::mem::{self, MaybeUninit};
+use core::mem;
 use core::ops::{Bound, RangeBounds};
 use core::{fmt, slice};
 
-use crate::{Borrowed, Full, Vector};
+use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// A fixed-capacity map that keeps its entries sorted by key, in memory
 /// provided by the caller.
@@ -30,17 +31,40 @@ use crate::{Borrowed, Full, Vector};
 /// // The keyframe in effect at time 15.
 /// assert_eq!(keyframes.at_or_before(&15), Some((&10, &"step")));
 /// ```
-pub struct OrderedMap<'a, K, V> {
+pub struct OrderedMap<K, V, S: Storage<(K, V)>> {
     // Invariant: sorted by key, strictly increasing (no duplicate keys).
-    entries: Vector<(K, V), Borrowed<'a>>,
+    entries: Vector<(K, V), S>,
 }
 
-impl<'a, K, V> OrderedMap<'a, K, V> {
-    /// Creates an empty map using `storage` as its memory.
+impl<K, V, const N: usize> OrderedMap<K, V, Inline<N>> {
+    /// Creates an empty map with room for `N` entries inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub fn new(storage: &'a mut [MaybeUninit<(K, V)>]) -> Self {
+    pub const fn inline() -> Self {
         Self {
-            entries: Vector::new(storage),
+            entries: Vector::inline(),
+        }
+    }
+}
+
+impl<K, V, const N: usize> Default for OrderedMap<K, V, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<K, V, S: Storage<(K, V)>> OrderedMap<K, V, S> {
+    /// Creates an empty map on `buffer`: a reference to memory borrows it,
+    /// a `Memory` passed by value is stored inside the map.
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<(K, V), Storage = S>,
+    {
+        Self {
+            entries: Vector::new(buffer),
         }
     }
 
@@ -128,7 +152,7 @@ impl<'a, K, V> OrderedMap<'a, K, V> {
     }
 }
 
-impl<K: Ord, V> OrderedMap<'_, K, V> {
+impl<K: Ord, V, S: Storage<(K, V)>> OrderedMap<K, V, S> {
     /// Inserts `value` under `key`.
     ///
     /// Returns `Ok(Some(old))` when the key was already present (the value
@@ -263,13 +287,13 @@ impl<K: Ord, V> OrderedMap<'_, K, V> {
     }
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OrderedMap<'_, K, V> {
+impl<K: fmt::Debug, V: fmt::Debug, S: Storage<(K, V)>> fmt::Debug for OrderedMap<K, V, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<'m, K, V> IntoIterator for &'m OrderedMap<'_, K, V> {
+impl<'m, K, V, S: Storage<(K, V)>> IntoIterator for &'m OrderedMap<K, V, S> {
     type Item = (&'m K, &'m V);
     type IntoIter = Iter<'m, K, V>;
 
@@ -279,7 +303,7 @@ impl<'m, K, V> IntoIterator for &'m OrderedMap<'_, K, V> {
     }
 }
 
-impl<'m, K, V> IntoIterator for &'m mut OrderedMap<'_, K, V> {
+impl<'m, K, V, S: Storage<(K, V)>> IntoIterator for &'m mut OrderedMap<K, V, S> {
     type Item = (&'m K, &'m mut V);
     type IntoIter = IterMut<'m, K, V>;
 

@@ -214,3 +214,27 @@ impl<T, const N: usize> IntoBuffer<T> for Memory<T, N> {
         self.into_slots()
     }
 }
+
+/// With the `alloc` feature, a `Vec` of slots can be borrowed directly; its
+/// current length is the capacity.
+#[cfg(feature = "alloc")]
+impl<'a, T> IntoBuffer<T> for &'a mut alloc::vec::Vec<MaybeUninit<T>> {
+    type Storage = Borrowed<'a>;
+
+    #[inline]
+    fn into_buffer(self) -> Slots<'a, T> {
+        Slots::new(self)
+    }
+}
+
+/// With the `alloc` feature, a boxed slice of slots can be borrowed
+/// directly.
+#[cfg(feature = "alloc")]
+impl<'a, T> IntoBuffer<T> for &'a mut alloc::boxed::Box<[MaybeUninit<T>]> {
+    type Storage = Borrowed<'a>;
+
+    #[inline]
+    fn into_buffer(self) -> Slots<'a, T> {
+        Slots::new(self)
+    }
+}

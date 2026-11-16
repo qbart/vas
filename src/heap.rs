@@ -4,10 +4,11 @@
 
 use core::cmp::Ordering;
 use core::fmt;
-use core::mem::{ManuallyDrop, MaybeUninit};
+use core::mem::ManuallyDrop;
 use core::ptr;
 
-use crate::{Borrowed, Full, Vector};
+use crate::storage::{Inline, IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// Decides which element a [`Heap`] hands out first: the one that compares
 /// [`Greater`](Ordering::Greater) than all others.
@@ -77,36 +78,79 @@ impl<T, F: Fn(&T, &T) -> Ordering> Order<T> for F {
 /// assert!(open.push(0.5).is_ok());
 /// assert_eq!(open.pop(), Some(0.5));
 /// ```
-pub struct Heap<'a, T, O = Max> {
+pub struct Heap<T, S: Storage<T>, O = Max> {
     // Invariant (heap property): no element is greater, by `order`, than its
     // parent at `(index - 1) / 2`.
-    items: Vector<T, Borrowed<'a>>,
+    items: Vector<T, S>,
     order: O,
 }
 
-impl<'a, T: Ord> Heap<'a, T, Max> {
-    /// Creates an empty heap that pops the largest element first.
+impl<T: Ord, S: Storage<T>> Heap<T, S, Max> {
+    /// Creates an empty heap that pops the largest element first. A
+    /// reference to memory borrows it; a `Memory` passed by value is stored
+    /// inside the heap.
     #[inline]
-    pub fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
-        Self::with_order(storage, Max)
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<T, Storage = S>,
+    {
+        Self::with_order(buffer, Max)
     }
 }
 
-impl<'a, T: Ord> Heap<'a, T, Min> {
+impl<T: Ord, S: Storage<T>> Heap<T, S, Min> {
     /// Creates an empty heap that pops the smallest element first.
     #[inline]
-    pub fn min(storage: &'a mut [MaybeUninit<T>]) -> Self {
-        Self::with_order(storage, Min)
+    pub fn min<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<T, Storage = S>,
+    {
+        Self::with_order(buffer, Min)
     }
 }
 
-impl<'a, T, O> Heap<'a, T, O> {
+impl<T, O, const N: usize> Heap<T, Inline<N>, O> {
+    /// Creates an empty heap with room for `N` elements inside itself,
+    /// popping first whichever element `order` ranks greatest: [`Max`],
+    /// [`Min`] or a closure.
+    ///
+    /// This is `const`, so it can initialise a `static`.
+    #[inline]
+    pub const fn inline_with(order: O) -> Self {
+        Self {
+            items: Vector::inline(),
+            order,
+        }
+    }
+}
+
+impl<T: Ord, const N: usize> Heap<T, Inline<N>, Max> {
+    /// Creates an empty heap with room for `N` elements inside itself that
+    /// pops the largest element first. For other orders see
+    /// [`inline_with`](Self::inline_with).
+    #[inline]
+    pub const fn inline() -> Self {
+        Self::inline_with(Max)
+    }
+}
+
+impl<T, O: Default, const N: usize> Default for Heap<T, Inline<N>, O> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline_with(O::default())
+    }
+}
+
+impl<T, S: Storage<T>, O> Heap<T, S, O> {
     /// Creates an empty heap that pops first whichever element `order`
     /// ranks greatest.
     #[inline]
-    pub fn with_order(storage: &'a mut [MaybeUninit<T>], order: O) -> Self {
+    pub fn with_order<B>(buffer: B, order: O) -> Self
+    where
+        B: IntoBuffer<T, Storage = S>,
+    {
         Self {
-            items: Vector::new(storage),
+            items: Vector::new(buffer),
             order,
         }
     }
@@ -161,7 +205,7 @@ impl<'a, T, O> Heap<'a, T, O> {
     }
 }
 
-impl<T, O: Order<T>> Heap<'_, T, O> {
+impl<T, S: Storage<T>, O: Order<T>> Heap<T, S, O> {
     /// Adds `value`, or hands it back in [`Full`] when there is no room.
     #[inline]
     pub fn push(&mut self, value: T) -> Result<(), Full<T>> {
@@ -309,7 +353,7 @@ unsafe fn sift_down_to_bottom<T, O: Order<T>>(data: &mut [T], order: &O, positio
     unsafe { sift_up(data, order, position, bottom) };
 }
 
-impl<T: fmt::Debug, O> fmt::Debug for Heap<'_, T, O> {
+impl<T: fmt::Debug, S: Storage<T>, O> fmt::Debug for Heap<T, S, O> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.as_slice(), f)
     }

@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, slice};
 
 use crate::heap::{Heap, Order};
+use crate::storage::Borrowed;
 use crate::storage::Storage;
 use crate::{Full, Vector};
 
@@ -122,7 +123,7 @@ impl Order<Open> for Cheapest {
 /// ```
 pub struct PathFinder<'a> {
     nodes: &'a mut [Node],
-    open: Heap<'a, Open, Cheapest>,
+    open: Heap<Open, Borrowed<'a>, Cheapest>,
     // Identifies the current search; see `Node::stamp`.
     stamp: u32,
     // Start and goal of the last search, when it found a path.

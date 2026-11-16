@@ -106,3 +106,17 @@ fn from_heap_is_static() {
         assert!(particles.is_ok_and(|(x, y)| x.is_ok() && y.is_ok()));
     }
 }
+
+#[test]
+fn vec_and_box_of_slots_can_be_borrowed_directly() {
+    use core::mem::MaybeUninit;
+    let mut memory: Vec<MaybeUninit<u32>> = Vec::new();
+    memory.resize_with(8, MaybeUninit::uninit);
+    let mut v = Vector::new(&mut memory);
+    assert!(v.push(1).is_ok());
+    assert_eq!(v.capacity(), 8);
+
+    let mut boxed: Box<[MaybeUninit<u32>]> = Box::new_uninit_slice(4);
+    let w = Vector::new(&mut boxed);
+    assert_eq!(w.capacity(), 4);
+}

@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, slice};
 
 use crate::OutOfBounds;
+use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
 
 const BITS: usize = u64::BITS as usize;
 
@@ -30,42 +31,84 @@ pub const fn words(bits: usize) -> usize {
 /// assert!(visited.contains(42));
 /// assert_eq!(visited.count(), 1);
 /// ```
-pub struct Bitset<'a> {
-    words: &'a mut [u64],
+pub struct Bitset<S: Storage<u64>> {
+    // Invariant: `used <= buffer.slots().len()` and the first `used` words
+    // are initialised.
+    buffer: S::Buffer,
+    used: usize,
 }
 
-impl<'a> Bitset<'a> {
-    /// Creates a set with every bit clear, using `storage` as its memory.
+impl<const N: usize> Bitset<Inline<N>> {
+    /// Creates a set of `64 * N` bits, all clear, held inside itself.
+    ///
+    /// `N` counts 64-bit words; use [`words`] to get it from a number of
+    /// bits: `Bitset<Inline<{ words(1000) }>>`. This is `const`, so it can
+    /// initialise a `static`.
+    #[inline]
+    pub const fn inline() -> Self {
+        Self {
+            buffer: [MaybeUninit::new(0); N],
+            used: N,
+        }
+    }
+}
+
+impl<const N: usize> Default for Bitset<Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<S: Storage<u64>> Bitset<S> {
+    /// Creates a set with every bit clear on `buffer`: a reference to
+    /// memory borrows it, a `Memory` passed by value is stored inside the
+    /// set.
     ///
     /// The capacity is 64 bits per word. Clears every word, so creation is
     /// O(words).
-    pub fn new(storage: &'a mut [MaybeUninit<u64>]) -> Self {
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<u64, Storage = S>,
+    {
+        let mut buffer = buffer.into_buffer();
+        let slots = buffer.slots_mut();
         // Cap the size so a bit index can never overflow `usize`.
-        let used = storage.len().min(usize::MAX / BITS);
-        let storage = match storage.get_mut(..used) {
-            Some(storage) => storage,
-            None => &mut [],
-        };
-        for word in storage.iter_mut() {
+        let used = slots.len().min(usize::MAX / BITS);
+        for word in slots.iter_mut().take(used) {
             word.write(0);
         }
-        // SAFETY: every word was just initialised, and `MaybeUninit<u64>`
-        // has the layout of `u64`.
-        let words =
-            unsafe { slice::from_raw_parts_mut(storage.as_mut_ptr().cast::<u64>(), storage.len()) };
-        Self { words }
+        Self { buffer, used }
+    }
+
+    #[inline]
+    fn words(&self) -> &[u64] {
+        // SAFETY: the first `used` words are initialised by the invariant,
+        // and `MaybeUninit<u64>` has the layout of `u64`.
+        unsafe { slice::from_raw_parts(self.buffer.slots().as_ptr().cast::<u64>(), self.used) }
+    }
+
+    #[inline]
+    fn words_mut(&mut self) -> &mut [u64] {
+        // SAFETY: as in `words`, and `self` is borrowed exclusively.
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.buffer.slots_mut().as_mut_ptr().cast::<u64>(),
+                self.used,
+            )
+        }
     }
 
     /// Number of bits the set has room for.
     #[inline]
-    pub const fn capacity(&self) -> usize {
-        self.words.len() * BITS
+    pub fn capacity(&self) -> usize {
+        self.words().len() * BITS
     }
 
     /// Number of bits that are set.
     #[inline]
     pub fn count(&self) -> usize {
-        self.words
+        self.words()
             .iter()
             .map(|word| word.count_ones() as usize)
             .sum()
@@ -74,19 +117,19 @@ impl<'a> Bitset<'a> {
     /// `true` when no bit is set.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.words.iter().all(|word| *word == 0)
+        self.words().iter().all(|word| *word == 0)
     }
 
     /// `true` when every bit is set.
     #[inline]
     pub fn is_full(&self) -> bool {
-        self.words.iter().all(|word| *word == u64::MAX)
+        self.words().iter().all(|word| *word == u64::MAX)
     }
 
     /// `true` when bit `index` is set. Out-of-range indices are never set.
     #[inline]
     pub fn contains(&self, index: usize) -> bool {
-        match self.words.get(index / BITS) {
+        match self.words().get(index / BITS) {
             Some(word) => word & mask(index) != 0,
             None => false,
         }
@@ -95,7 +138,7 @@ impl<'a> Bitset<'a> {
     /// Sets bit `index`. Returns `true` when it was clear before.
     #[inline]
     pub fn insert(&mut self, index: usize) -> Result<bool, OutOfBounds> {
-        let word = self.words.get_mut(index / BITS).ok_or(OutOfBounds)?;
+        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
         let was_clear = *word & mask(index) == 0;
         *word |= mask(index);
         Ok(was_clear)
@@ -105,7 +148,7 @@ impl<'a> Bitset<'a> {
     /// out-of-range indices were never set.
     #[inline]
     pub fn remove(&mut self, index: usize) -> bool {
-        match self.words.get_mut(index / BITS) {
+        match self.words_mut().get_mut(index / BITS) {
             Some(word) => {
                 let was_set = *word & mask(index) != 0;
                 *word &= !mask(index);
@@ -118,7 +161,7 @@ impl<'a> Bitset<'a> {
     /// Sets bit `index` to `value`.
     #[inline]
     pub fn set(&mut self, index: usize, value: bool) -> Result<(), OutOfBounds> {
-        let word = self.words.get_mut(index / BITS).ok_or(OutOfBounds)?;
+        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
         if value {
             *word |= mask(index);
         } else {
@@ -130,7 +173,7 @@ impl<'a> Bitset<'a> {
     /// Flips bit `index` and returns its new value.
     #[inline]
     pub fn toggle(&mut self, index: usize) -> Result<bool, OutOfBounds> {
-        let word = self.words.get_mut(index / BITS).ok_or(OutOfBounds)?;
+        let word = self.words_mut().get_mut(index / BITS).ok_or(OutOfBounds)?;
         *word ^= mask(index);
         Ok(*word & mask(index) != 0)
     }
@@ -138,19 +181,19 @@ impl<'a> Bitset<'a> {
     /// Clears every bit.
     #[inline]
     pub fn clear(&mut self) {
-        self.words.fill(0);
+        self.words_mut().fill(0);
     }
 
     /// Sets every bit.
     #[inline]
     pub fn fill(&mut self) {
-        self.words.fill(u64::MAX);
+        self.words_mut().fill(u64::MAX);
     }
 
     /// Index of the lowest set bit.
     #[inline]
     pub fn first_set(&self) -> Option<usize> {
-        self.words
+        self.words()
             .iter()
             .enumerate()
             .find(|(_, word)| **word != 0)
@@ -160,7 +203,7 @@ impl<'a> Bitset<'a> {
     /// Index of the lowest clear bit. Handy for finding a free slot.
     #[inline]
     pub fn first_clear(&self) -> Option<usize> {
-        self.words
+        self.words()
             .iter()
             .enumerate()
             .find(|(_, word)| **word != u64::MAX)
@@ -170,8 +213,8 @@ impl<'a> Bitset<'a> {
     /// Sets every bit that is set in `other`. Bits beyond this set's
     /// capacity are ignored.
     #[inline]
-    pub fn union_with(&mut self, other: &Bitset<'_>) {
-        for (word, theirs) in self.words.iter_mut().zip(other.words.iter()) {
+    pub fn union_with<O: Storage<u64>>(&mut self, other: &Bitset<O>) {
+        for (word, theirs) in self.words_mut().iter_mut().zip(other.words().iter()) {
             *word |= theirs;
         }
     }
@@ -179,17 +222,17 @@ impl<'a> Bitset<'a> {
     /// Keeps only the bits that are also set in `other`. Bits beyond
     /// `other`'s capacity count as clear.
     #[inline]
-    pub fn intersect_with(&mut self, other: &Bitset<'_>) {
-        let mut theirs = other.words.iter();
-        for word in self.words.iter_mut() {
+    pub fn intersect_with<O: Storage<u64>>(&mut self, other: &Bitset<O>) {
+        let mut theirs = other.words().iter();
+        for word in self.words_mut().iter_mut() {
             *word &= theirs.next().copied().unwrap_or(0);
         }
     }
 
     /// Clears every bit that is set in `other`.
     #[inline]
-    pub fn difference_with(&mut self, other: &Bitset<'_>) {
-        for (word, theirs) in self.words.iter_mut().zip(other.words.iter()) {
+    pub fn difference_with<O: Storage<u64>>(&mut self, other: &Bitset<O>) {
+        for (word, theirs) in self.words_mut().iter_mut().zip(other.words().iter()) {
             *word &= !theirs;
         }
     }
@@ -198,7 +241,7 @@ impl<'a> Bitset<'a> {
     #[inline]
     pub fn iter(&self) -> Iter<'_> {
         Iter {
-            words: self.words.iter().enumerate(),
+            words: self.words().iter().enumerate(),
             current: 0,
             base: 0,
         }
@@ -206,8 +249,8 @@ impl<'a> Bitset<'a> {
 
     /// The underlying words, 64 bits each, lowest bits first.
     #[inline]
-    pub const fn as_words(&self) -> &[u64] {
-        self.words
+    pub fn as_words(&self) -> &[u64] {
+        self.words()
     }
 }
 
@@ -216,13 +259,13 @@ const fn mask(index: usize) -> u64 {
     1 << (index % BITS)
 }
 
-impl fmt::Debug for Bitset<'_> {
+impl<S: Storage<u64>> fmt::Debug for Bitset<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.iter()).finish()
     }
 }
 
-impl<'b> IntoIterator for &'b Bitset<'_> {
+impl<'b, S: Storage<u64>> IntoIterator for &'b Bitset<S> {
     type Item = usize;
     type IntoIter = Iter<'b>;
 

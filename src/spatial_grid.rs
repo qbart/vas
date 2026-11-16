@@ -9,6 +9,7 @@ use core::{fmt, slice};
 use crate::Full;
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
+use crate::storage::Borrowed;
 
 /// "No entry" in a link.
 const NONE: u32 = u32::MAX;
@@ -85,7 +86,7 @@ pub struct SpatialGrid<'a, T, const D: usize> {
     // Invariant: `cells[i]` is the head of a doubly linked list of exactly
     // the live entries whose `cell` is `i`.
     cells: &'a mut [u32],
-    entries: Pool<'a, Entry<T, D>>,
+    entries: Pool<Entry<T, D>, Borrowed<'a>>,
     bounds: Aabb<D>,
     // Number of cells along each axis.
     counts: [u32; D],
@@ -158,7 +159,7 @@ impl<'a, T, const D: usize> SpatialGrid<'a, T, D> {
 
     /// Maximum number of entries the grid can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.entries.capacity()
     }
 
@@ -170,7 +171,7 @@ impl<'a, T, const D: usize> SpatialGrid<'a, T, D> {
 
     /// `true` when no more entries can be inserted.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.entries.is_full()
     }
 

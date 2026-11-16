@@ -8,6 +8,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, hash, slice};
 
 use crate::Full;
+use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
 
 /// Marks the end of the free list. Never a valid slot index, because the
 /// capacity is capped at `u32::MAX`.
@@ -107,11 +108,9 @@ impl<T> fmt::Debug for Handle<T> {
 /// the slot.
 ///
 /// ```
-/// use vas::pool::Slot;
-/// use vas::{Memory, Pool};
+/// use vas::{Inline, Pool};
 ///
-/// let mut memory = Memory::<Slot<&str>, 64>::new();
-/// let mut pool = Pool::new(&mut memory);
+/// let mut pool = Pool::<&str, Inline<64>>::inline();
 ///
 /// if let Ok(player) = pool.insert("player") {
 ///     assert_eq!(pool.get(player), Some(&"player"));
@@ -119,27 +118,58 @@ impl<T> fmt::Debug for Handle<T> {
 ///     assert_eq!(pool.get(player), None); // stale handle
 /// }
 /// ```
-pub struct Pool<'a, T> {
+///
+/// The storage parameter `S` decides where the slots live (see
+/// [`storage`](crate::storage)): `Pool<T, Inline<N>>` holds them itself,
+/// `Pool<T, Borrowed<'a>>` uses memory you pass to [`new`](Self::new), sized
+/// in [`Slot<T>`]s.
+pub struct Pool<T, S: Storage<Slot<T>>> {
     // Invariants:
-    // - `storage[..initialized]` are initialised `Slot`s.
+    // - the first `initialized` slots of the buffer are initialised `Slot`s.
     // - a slot's value is initialised exactly while its generation is odd.
     // - the free list (`free_head`, `next_free`) links free slots inside the
     //   initialised prefix.
-    storage: &'a mut [MaybeUninit<Slot<T>>],
+    buffer: S::Buffer,
     initialized: u32,
     free_head: u32,
     len: u32,
 }
 
-impl<'a, T> Pool<'a, T> {
-    /// Creates an empty pool using `storage` as its memory.
+impl<T, const N: usize> Pool<T, Inline<N>> {
+    /// Creates an empty pool with room for `N` values inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
+    #[inline]
+    pub const fn inline() -> Self {
+        Self {
+            buffer: [const { MaybeUninit::uninit() }; N],
+            initialized: 0,
+            free_head: NONE,
+            len: 0,
+        }
+    }
+}
+
+impl<T, const N: usize> Default for Pool<T, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<T, S: Storage<Slot<T>>> Pool<T, S> {
+    /// Creates an empty pool on `buffer`: a reference to memory borrows it,
+    /// a `Memory` passed by value is stored inside the pool.
     ///
     /// Creation is O(1): slots are set up lazily on first use. At most
     /// `u32::MAX` slots are used.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<Slot<T>>]) -> Self {
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<Slot<T>, Storage = S>,
+    {
         Self {
-            storage,
+            buffer: buffer.into_buffer(),
             initialized: 0,
             free_head: NONE,
             len: 0,
@@ -154,9 +184,10 @@ impl<'a, T> Pool<'a, T> {
 
     /// Maximum number of values the pool can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
-        if self.storage.len() < NONE as usize {
-            self.storage.len()
+    pub fn capacity(&self) -> usize {
+        let slots = self.buffer.slots().len();
+        if slots < NONE as usize {
+            slots
         } else {
             NONE as usize
         }
@@ -170,7 +201,7 @@ impl<'a, T> Pool<'a, T> {
 
     /// `true` when the next insert would fail.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.free_head == NONE && self.initialized as usize >= self.capacity()
     }
 
@@ -196,7 +227,7 @@ impl<'a, T> Pool<'a, T> {
         if index == NONE {
             return Err(Full(value));
         }
-        match self.storage.get_mut(index as usize) {
+        match self.buffer.slots_mut().get_mut(index as usize) {
             Some(raw) => {
                 raw.write(Slot {
                     generation: 1,
@@ -326,23 +357,23 @@ impl<'a, T> Pool<'a, T> {
     }
 
     #[inline]
-    const fn slots(&self) -> &[Slot<T>] {
+    fn slots(&self) -> &[Slot<T>] {
         // SAFETY: the first `initialized` slots are initialised by the
         // invariant, and `MaybeUninit<Slot<T>>` has the layout of `Slot<T>`.
         unsafe {
             slice::from_raw_parts(
-                self.storage.as_ptr().cast::<Slot<T>>(),
+                self.buffer.slots().as_ptr().cast::<Slot<T>>(),
                 self.initialized as usize,
             )
         }
     }
 
     #[inline]
-    const fn slots_mut(&mut self) -> &mut [Slot<T>] {
+    fn slots_mut(&mut self) -> &mut [Slot<T>] {
         // SAFETY: as in `slots`, and `self` is borrowed exclusively.
         unsafe {
             slice::from_raw_parts_mut(
-                self.storage.as_mut_ptr().cast::<Slot<T>>(),
+                self.buffer.slots_mut().as_mut_ptr().cast::<Slot<T>>(),
                 self.initialized as usize,
             )
         }
@@ -358,7 +389,7 @@ impl<'a, T> Pool<'a, T> {
     }
 }
 
-impl<T> Drop for Pool<'_, T> {
+impl<T, S: Storage<Slot<T>>> Drop for Pool<T, S> {
     fn drop(&mut self) {
         for slot in self.slots_mut() {
             if slot.is_occupied() {
@@ -370,13 +401,13 @@ impl<T> Drop for Pool<'_, T> {
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Pool<'_, T> {
+impl<T: fmt::Debug, S: Storage<Slot<T>>> fmt::Debug for Pool<T, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<'p, T> IntoIterator for &'p Pool<'_, T> {
+impl<'p, T, S: Storage<Slot<T>>> IntoIterator for &'p Pool<T, S> {
     type Item = (Handle<T>, &'p T);
     type IntoIter = Iter<'p, T>;
 
@@ -386,7 +417,7 @@ impl<'p, T> IntoIterator for &'p Pool<'_, T> {
     }
 }
 
-impl<'p, T> IntoIterator for &'p mut Pool<'_, T> {
+impl<'p, T, S: Storage<Slot<T>>> IntoIterator for &'p mut Pool<T, S> {
     type Item = (Handle<T>, &'p mut T);
     type IntoIter = IterMut<'p, T>;
 

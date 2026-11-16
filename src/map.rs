@@ -3,12 +3,13 @@
 #![allow(unsafe_code)]
 
 use core::borrow::Borrow;
-use core::hash::{BuildHasher, Hash};
+use core::hash::{BuildHasher, BuildHasherDefault, Hash};
 use core::mem::{self, MaybeUninit};
 use core::{fmt, slice};
 
 use crate::Full;
 use crate::hash::FastState;
+use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
 
 /// `meta` of a slot that holds no entry.
 const EMPTY: u32 = 0;
@@ -57,53 +58,98 @@ const fn next(index: usize, capacity: usize) -> usize {
 /// assert_eq!(map.get(&7), Some(&"sword"));
 /// assert_eq!(map.remove(&7), Some("sword"));
 /// ```
-pub struct Map<'a, K, V, S = FastState> {
+pub struct Map<K, V, S: Storage<Slot<K, V>>, H = FastState> {
     // Invariant: a slot's key and value are initialised exactly while its
     // `meta` is not `EMPTY`, and every entry is reachable by probing forward
     // from its home slot without crossing an empty slot.
-    slots: &'a mut [Slot<K, V>],
+    //
+    // The first `used` slots of the buffer are initialised `Slot`s (whose
+    // key and value may themselves be uninitialised); only those are used.
+    buffer: S::Buffer,
+    used: usize,
     len: usize,
-    hasher: S,
+    hasher: H,
 }
 
-impl<'a, K, V> Map<'a, K, V> {
-    /// Creates an empty map using `storage` as its memory, with the default
+impl<K, V, const N: usize> Map<K, V, Inline<N>> {
+    /// Creates an empty map with `N` slots inside itself, with the default
     /// [`FastHasher`](crate::hash::FastHasher).
     ///
-    /// Marks every slot as empty, so creation is O(capacity).
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub fn new(storage: &'a mut [MaybeUninit<Slot<K, V>>]) -> Self {
-        Self::with_hasher(storage, FastState::default())
+    pub const fn inline() -> Self {
+        Self::inline_with_hasher(BuildHasherDefault::new())
     }
 }
 
-impl<'a, K, V, S> Map<'a, K, V, S> {
-    /// Creates an empty map using `storage` as its memory and `hasher` to
+impl<K, V, H, const N: usize> Map<K, V, Inline<N>, H> {
+    /// Creates an empty map with `N` slots inside itself and `hasher` to
     /// hash keys.
+    #[inline]
+    pub const fn inline_with_hasher(hasher: H) -> Self {
+        Self {
+            buffer: [const {
+                MaybeUninit::new(Slot {
+                    meta: EMPTY,
+                    key: MaybeUninit::uninit(),
+                    value: MaybeUninit::uninit(),
+                })
+            }; N],
+            used: if N < u32::MAX as usize {
+                N
+            } else {
+                u32::MAX as usize
+            },
+            len: 0,
+            hasher,
+        }
+    }
+}
+
+impl<K, V, H: Default, const N: usize> Default for Map<K, V, Inline<N>, H> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline_with_hasher(H::default())
+    }
+}
+
+impl<K, V, S: Storage<Slot<K, V>>> Map<K, V, S> {
+    /// Creates an empty map on `buffer`, with the default
+    /// [`FastHasher`](crate::hash::FastHasher). A reference to memory
+    /// borrows it; a `Memory` passed by value is stored inside the map.
+    ///
+    /// Marks every slot as empty, so creation is O(capacity).
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<Slot<K, V>, Storage = S>,
+    {
+        Self::with_hasher(buffer, FastState::default())
+    }
+}
+
+impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
+    /// Creates an empty map on `buffer` with `hasher` to hash keys.
     ///
     /// Marks every slot as empty, so creation is O(capacity). At most
     /// `u32::MAX` slots are used.
-    pub fn with_hasher(storage: &'a mut [MaybeUninit<Slot<K, V>>], hasher: S) -> Self {
-        let used = storage.len().min(u32::MAX as usize);
-        let storage = match storage.get_mut(..used) {
-            Some(storage) => storage,
-            None => &mut [],
-        };
-        for slot in storage.iter_mut() {
+    pub fn with_hasher<B>(buffer: B, hasher: H) -> Self
+    where
+        B: IntoBuffer<Slot<K, V>, Storage = S>,
+    {
+        let mut buffer = buffer.into_buffer();
+        let slots = buffer.slots_mut();
+        let used = slots.len().min(u32::MAX as usize);
+        for slot in slots.iter_mut().take(used) {
             slot.write(Slot {
                 meta: EMPTY,
                 key: MaybeUninit::uninit(),
                 value: MaybeUninit::uninit(),
             });
         }
-        // SAFETY: every element was just initialised as a `Slot` (whose key
-        // and value are themselves allowed to be uninitialised), and
-        // `MaybeUninit<Slot>` has the layout of `Slot`.
-        let slots = unsafe {
-            slice::from_raw_parts_mut(storage.as_mut_ptr().cast::<Slot<K, V>>(), storage.len())
-        };
         Self {
-            slots,
+            buffer,
+            used,
             len: 0,
             hasher,
         }
@@ -118,7 +164,7 @@ impl<'a, K, V, S> Map<'a, K, V, S> {
     /// Maximum number of entries the map can hold.
     #[inline]
     pub const fn capacity(&self) -> usize {
-        self.slots.len()
+        self.used
     }
 
     /// `true` when the map holds no entries.
@@ -130,13 +176,13 @@ impl<'a, K, V, S> Map<'a, K, V, S> {
     /// `true` when no new key can be inserted.
     #[inline]
     pub const fn is_full(&self) -> bool {
-        self.len == self.slots.len()
+        self.len == self.used
     }
 
     /// Removes and drops all entries.
     pub fn clear(&mut self) {
         self.len = 0;
-        for slot in self.slots.iter_mut() {
+        for slot in live_mut(&mut self.buffer, self.used).iter_mut() {
             if slot.meta != EMPTY {
                 // Mark the slot empty before dropping, so a panicking `Drop`
                 // cannot lead to a double drop.
@@ -156,7 +202,7 @@ impl<'a, K, V, S> Map<'a, K, V, S> {
     #[inline]
     pub fn iter(&self) -> Iter<'_, K, V> {
         Iter {
-            slots: self.slots.iter(),
+            slots: live(&self.buffer, self.used).iter(),
         }
     }
 
@@ -165,12 +211,12 @@ impl<'a, K, V, S> Map<'a, K, V, S> {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
         IterMut {
-            slots: self.slots.iter_mut(),
+            slots: live_mut(&mut self.buffer, self.used).iter_mut(),
         }
     }
 }
 
-impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
+impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
     /// Inserts `value` under `key`.
     ///
     /// Returns `Ok(Some(old))` when the key was already present (the value
@@ -178,10 +224,10 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
     /// hands both back in [`Full`] when the key is new and there is no room.
     pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>, Full<(K, V)>> {
         let meta = self.meta_for(&key);
-        let capacity = self.slots.len();
+        let capacity = self.used;
         let mut index = home(meta, capacity);
         for _ in 0..capacity {
-            let Some(slot) = self.slots.get_mut(index) else {
+            let Some(slot) = live_mut(&mut self.buffer, self.used).get_mut(index) else {
                 break;
             };
             if slot.meta == EMPTY {
@@ -209,7 +255,7 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let slot = self.slots.get(self.find(key)?)?;
+        let slot = live(&self.buffer, self.used).get(self.find(key)?)?;
         // SAFETY: `find` only returns occupied slots.
         Some(unsafe { slot.value.assume_init_ref() })
     }
@@ -222,7 +268,7 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         Q: Hash + Eq + ?Sized,
     {
         let index = self.find(key)?;
-        let slot = self.slots.get_mut(index)?;
+        let slot = live_mut(&mut self.buffer, self.used).get_mut(index)?;
         // SAFETY: `find` only returns occupied slots.
         Some(unsafe { slot.value.assume_init_mut() })
     }
@@ -253,9 +299,9 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let capacity = self.slots.len();
+        let capacity = self.used;
         let mut hole = self.find(key)?;
-        let slot = self.slots.get_mut(hole)?;
+        let slot = live_mut(&mut self.buffer, self.used).get_mut(hole)?;
         slot.meta = EMPTY;
         // SAFETY: `find` only returns occupied slots, so key and value are
         // initialised. The slot was marked empty first, so they are moved
@@ -269,7 +315,7 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         let mut index = hole;
         for _ in 1..capacity {
             index = next(index, capacity);
-            let Some(slot) = self.slots.get(index) else {
+            let Some(slot) = live(&self.buffer, self.used).get(index) else {
                 break;
             };
             if slot.meta == EMPTY {
@@ -284,7 +330,9 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
                 hole < home || home <= index
             };
             if !stays {
-                if let Ok([empty, moved]) = self.slots.get_disjoint_mut([hole, index]) {
+                if let Ok([empty, moved]) =
+                    live_mut(&mut self.buffer, self.used).get_disjoint_mut([hole, index])
+                {
                     mem::swap(empty, moved);
                 }
                 hole = index;
@@ -308,10 +356,10 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         Q: Hash + Eq + ?Sized,
     {
         let meta = self.meta_for(key);
-        let capacity = self.slots.len();
+        let capacity = self.used;
         let mut index = home(meta, capacity);
         for _ in 0..capacity {
-            let slot = self.slots.get(index)?;
+            let slot = live(&self.buffer, self.used).get(index)?;
             if slot.meta == EMPTY {
                 return None;
             }
@@ -325,20 +373,20 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
     }
 }
 
-impl<K, V, S> Drop for Map<'_, K, V, S> {
+impl<K, V, S: Storage<Slot<K, V>>, H> Drop for Map<K, V, S, H> {
     #[inline]
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for Map<'_, K, V, S> {
+impl<K: fmt::Debug, V: fmt::Debug, S: Storage<Slot<K, V>>, H> fmt::Debug for Map<K, V, S, H> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<'m, K, V, S> IntoIterator for &'m Map<'_, K, V, S> {
+impl<'m, K, V, S: Storage<Slot<K, V>>, H> IntoIterator for &'m Map<K, V, S, H> {
     type Item = (&'m K, &'m V);
     type IntoIter = Iter<'m, K, V>;
 
@@ -348,7 +396,7 @@ impl<'m, K, V, S> IntoIterator for &'m Map<'_, K, V, S> {
     }
 }
 
-impl<'m, K, V, S> IntoIterator for &'m mut Map<'_, K, V, S> {
+impl<'m, K, V, S: Storage<Slot<K, V>>, H> IntoIterator for &'m mut Map<K, V, S, H> {
     type Item = (&'m K, &'m mut V);
     type IntoIter = IterMut<'m, K, V>;
 
@@ -399,4 +447,21 @@ impl<'m, K, V> Iterator for IterMut<'m, K, V> {
         }
         None
     }
+}
+
+/// The initialised slots of a map's buffer.
+#[inline]
+fn live<K, V, B: Buffer<Slot<K, V>>>(buffer: &B, used: usize) -> &[Slot<K, V>] {
+    // SAFETY: every constructor initialises the first `used` slots of the
+    // buffer as `Slot`s and they stay initialised; `MaybeUninit<Slot>` has
+    // the layout of `Slot`.
+    unsafe { slice::from_raw_parts(buffer.slots().as_ptr().cast::<Slot<K, V>>(), used) }
+}
+
+/// The initialised slots of a map's buffer, mutably. Takes the buffer
+/// rather than the map so the map's other fields stay usable.
+#[inline]
+fn live_mut<K, V, B: Buffer<Slot<K, V>>>(buffer: &mut B, used: usize) -> &mut [Slot<K, V>] {
+    // SAFETY: as in `live`, and the buffer is borrowed exclusively.
+    unsafe { slice::from_raw_parts_mut(buffer.slots_mut().as_mut_ptr().cast::<Slot<K, V>>(), used) }
 }

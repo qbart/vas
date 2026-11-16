@@ -6,6 +6,7 @@ use core::mem::MaybeUninit;
 use crate::Full;
 use crate::path::Space;
 use crate::pool::{self, Handle, Pool};
+use crate::storage::Borrowed;
 
 /// "No edge" in a link.
 const NONE: u32 = u32::MAX;
@@ -115,14 +116,14 @@ impl Cost for f32 {
 pub struct Graph<'a, N, E> {
     // Invariant: every edge's `from` and `to` are live nodes, and every edge
     // is in exactly the out-list of `from` and the in-list of `to`.
-    nodes: Pool<'a, Node<N>>,
-    edges: Pool<'a, Edge<E>>,
+    nodes: Pool<Node<N>, Borrowed<'a>>,
+    edges: Pool<Edge<E>, Borrowed<'a>>,
 }
 
 impl<'a, N, E> Graph<'a, N, E> {
     /// Creates an empty graph using the two blocks as its memory.
     #[inline]
-    pub const fn new(
+    pub fn new(
         nodes: &'a mut [MaybeUninit<NodeSlot<N>>],
         edges: &'a mut [MaybeUninit<EdgeSlot<E>>],
     ) -> Self {
@@ -146,13 +147,13 @@ impl<'a, N, E> Graph<'a, N, E> {
 
     /// Maximum number of nodes the graph can hold.
     #[inline]
-    pub const fn node_capacity(&self) -> usize {
+    pub fn node_capacity(&self) -> usize {
         self.nodes.capacity()
     }
 
     /// Maximum number of edges the graph can hold.
     #[inline]
-    pub const fn edge_capacity(&self) -> usize {
+    pub fn edge_capacity(&self) -> usize {
         self.edges.capacity()
     }
 

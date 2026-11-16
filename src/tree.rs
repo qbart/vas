@@ -2,10 +2,10 @@
 //! user-provided memory.
 
 use core::fmt;
-use core::mem::MaybeUninit;
 
 use crate::Full;
 use crate::pool::{self, Handle, Pool};
+use crate::storage::{Inline, IntoBuffer, Storage};
 
 /// "No node" in a link.
 const NONE: u32 = u32::MAX;
@@ -102,21 +102,46 @@ impl core::error::Error for MoveError {}
 ///     }
 /// }
 /// ```
-pub struct Tree<'a, T> {
+pub struct Tree<T, S: Storage<Slot<T>>> {
     // Invariant: all links refer to live nodes and are consistent with each
     // other (a node is in exactly one sibling list: its parent's, or the
     // root list).
-    nodes: Pool<'a, Node<T>>,
+    nodes: Pool<Node<T>, S>,
     first_root: u32,
     last_root: u32,
 }
 
-impl<'a, T> Tree<'a, T> {
-    /// Creates an empty tree using `storage` as its memory.
+impl<T, const N: usize> Tree<T, Inline<N>> {
+    /// Creates an empty tree with room for `N` nodes inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<Slot<T>>]) -> Self {
+    pub const fn inline() -> Self {
         Self {
-            nodes: Pool::new(storage),
+            nodes: Pool::inline(),
+            first_root: NONE,
+            last_root: NONE,
+        }
+    }
+}
+
+impl<T, const N: usize> Default for Tree<T, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<T, S: Storage<Slot<T>>> Tree<T, S> {
+    /// Creates an empty tree on `buffer`: a reference to memory borrows it,
+    /// a `Memory` passed by value is stored inside the tree.
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<Slot<T>, Storage = S>,
+    {
+        Self {
+            nodes: Pool::new(buffer),
             first_root: NONE,
             last_root: NONE,
         }
@@ -130,7 +155,7 @@ impl<'a, T> Tree<'a, T> {
 
     /// Maximum number of nodes the tree can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.nodes.capacity()
     }
 
@@ -142,7 +167,7 @@ impl<'a, T> Tree<'a, T> {
 
     /// `true` when no more nodes can be inserted.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.nodes.is_full()
     }
 
@@ -299,7 +324,7 @@ impl<'a, T> Tree<'a, T> {
 
     /// Iterates over the roots, in order.
     #[inline]
-    pub fn roots(&self) -> Siblings<'_, 'a, T> {
+    pub fn roots(&self) -> Siblings<'_, T, S> {
         Siblings {
             tree: self,
             next: self.first_root,
@@ -308,7 +333,7 @@ impl<'a, T> Tree<'a, T> {
 
     /// Iterates over the direct children of `id`, in order.
     #[inline]
-    pub fn children(&self, id: NodeId<T>) -> Siblings<'_, 'a, T> {
+    pub fn children(&self, id: NodeId<T>) -> Siblings<'_, T, S> {
         Siblings {
             tree: self,
             next: self.nodes.get(id).map_or(NONE, |node| node.first_child),
@@ -317,7 +342,7 @@ impl<'a, T> Tree<'a, T> {
 
     /// Iterates over the parent of `id`, then its parent, up to the root.
     #[inline]
-    pub fn ancestors(&self, id: NodeId<T>) -> Ancestors<'_, 'a, T> {
+    pub fn ancestors(&self, id: NodeId<T>) -> Ancestors<'_, T, S> {
         Ancestors {
             tree: self,
             next: self.nodes.get(id).map_or(NONE, |node| node.parent),
@@ -327,7 +352,7 @@ impl<'a, T> Tree<'a, T> {
     /// Iterates over everything below `id`, depth first: each node before
     /// its own children, children in order. `id` itself is not included.
     #[inline]
-    pub fn descendants(&self, id: NodeId<T>) -> Descendants<'_, 'a, T> {
+    pub fn descendants(&self, id: NodeId<T>) -> Descendants<'_, T, S> {
         Descendants {
             tree: self,
             top: id.index(),
@@ -436,12 +461,12 @@ impl<T> Node<T> {
 
 /// Iterator over a list of siblings. See [`Tree::children`] and
 /// [`Tree::roots`].
-pub struct Siblings<'t, 'a, T> {
-    tree: &'t Tree<'a, T>,
+pub struct Siblings<'t, T, S: Storage<Slot<T>>> {
+    tree: &'t Tree<T, S>,
     next: u32,
 }
 
-impl<T> Iterator for Siblings<'_, '_, T> {
+impl<T, S: Storage<Slot<T>>> Iterator for Siblings<'_, T, S> {
     type Item = NodeId<T>;
 
     #[inline]
@@ -453,12 +478,12 @@ impl<T> Iterator for Siblings<'_, '_, T> {
 }
 
 /// Iterator from a node's parent up to its root. See [`Tree::ancestors`].
-pub struct Ancestors<'t, 'a, T> {
-    tree: &'t Tree<'a, T>,
+pub struct Ancestors<'t, T, S: Storage<Slot<T>>> {
+    tree: &'t Tree<T, S>,
     next: u32,
 }
 
-impl<T> Iterator for Ancestors<'_, '_, T> {
+impl<T, S: Storage<Slot<T>>> Iterator for Ancestors<'_, T, S> {
     type Item = NodeId<T>;
 
     #[inline]
@@ -471,13 +496,13 @@ impl<T> Iterator for Ancestors<'_, '_, T> {
 
 /// Depth-first iterator over everything below a node. See
 /// [`Tree::descendants`].
-pub struct Descendants<'t, 'a, T> {
-    tree: &'t Tree<'a, T>,
+pub struct Descendants<'t, T, S: Storage<Slot<T>>> {
+    tree: &'t Tree<T, S>,
     top: u32,
     next: u32,
 }
 
-impl<T> Iterator for Descendants<'_, '_, T> {
+impl<T, S: Storage<Slot<T>>> Iterator for Descendants<'_, T, S> {
     type Item = NodeId<T>;
 
     fn next(&mut self) -> Option<NodeId<T>> {
