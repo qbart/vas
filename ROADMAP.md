@@ -84,6 +84,10 @@
 - [x] `Arena`: one block shared by many containers and values
 - [x] `StaticBlock`: a `'static` block, so containers need no lifetime parameter
 
+## 0.19.0 — heap blocks
+
+- [x] `alloc` feature (off by default): `Arena::from_heap`, `arena::HeapBlock`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

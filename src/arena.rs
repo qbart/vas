@@ -4,10 +4,19 @@
 
 use core::cell::{Cell, UnsafeCell};
 use core::marker::PhantomData;
+#[cfg(feature = "alloc")]
+use core::mem::ManuallyDrop;
 use core::mem::MaybeUninit;
+#[cfg(feature = "alloc")]
+use core::ops::{Deref, DerefMut};
+#[cfg(feature = "alloc")]
+use core::ptr::NonNull;
 use core::slice;
 #[cfg(target_has_atomic = "8")]
 use core::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(feature = "alloc")]
+use alloc::alloc::{Layout, alloc, dealloc};
 
 use crate::Full;
 
@@ -38,7 +47,8 @@ use crate::Full;
 ///
 /// - With a block that lives for the whole program (see [`StaticBlock`]),
 ///   the pieces are `'static`: containers built on them need no lifetime
-///   parameter and can be stored in any struct.
+///   parameter and can be stored in any struct. With the `alloc` feature,
+///   [`Arena::from_heap`] gives the same from the heap in one call.
 /// - With a shorter-lived block, structs holding the containers carry that
 ///   lifetime.
 ///
@@ -220,5 +230,143 @@ impl<const N: usize> Default for StaticBlock<N> {
     #[inline]
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Arena<'static> {
+    /// Takes `bytes` from the heap, once, for the rest of the program, and
+    /// creates an arena on them. Requires the `alloc` feature.
+    ///
+    /// The pieces are `'static`, so containers built on them need no
+    /// lifetime parameter. The block is **never returned** to the system;
+    /// for memory to give back, use [`HeapBlock`].
+    ///
+    /// Fails when the system has no such block to give.
+    ///
+    /// ```
+    /// use vas::{Arena, Vector};
+    ///
+    /// struct Particles {
+    ///     x: Vector<'static, f32>,
+    ///     y: Vector<'static, f32>,
+    /// }
+    ///
+    /// # fn main() -> Result<(), vas::Full<()>> {
+    /// let arena = Arena::from_heap(20 << 20)?; // 20 MB
+    /// let particles = Particles {
+    ///     x: Vector::new(arena.alloc(100_000)?),
+    ///     y: Vector::new(arena.alloc(100_000)?),
+    /// };
+    /// assert_eq!(particles.x.capacity() + particles.y.capacity(), 200_000);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_heap(bytes: usize) -> Result<Self, Full<()>> {
+        // Never dropped, so the block stays valid for `'static`.
+        let block = ManuallyDrop::new(HeapBlock::new(bytes)?);
+        Ok(Self {
+            start: block.start.as_ptr(),
+            capacity: block.layout.size(),
+            used: Cell::new(0),
+            marker: PhantomData,
+        })
+    }
+}
+
+/// A block of bytes taken from the heap and returned to it when dropped.
+/// Requires the `alloc` feature.
+///
+/// Use it for memory with a shorter life than the program, such as a level:
+/// build an [`Arena`] on it, and when the level is over either drop the
+/// block or build a new arena on it for the next one.
+///
+/// ```
+/// use vas::arena::HeapBlock;
+/// use vas::{Arena, Vector};
+///
+/// # fn main() -> Result<(), vas::Full<()>> {
+/// let mut block = HeapBlock::new(1 << 20)?; // 1 MB
+/// for level in 0..3 {
+///     let arena = Arena::new(&mut block);
+///     let mut enemies = Vector::new(arena.alloc::<u32>(1000)?);
+///     assert!(enemies.push(level).is_ok());
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(feature = "alloc")]
+pub struct HeapBlock {
+    // Invariant: when `layout.size() > 0`, `start` was returned by the
+    // global allocator for `layout` and is owned by this block. Otherwise
+    // `start` is dangling and nothing was allocated.
+    start: NonNull<u8>,
+    layout: Layout,
+}
+
+// SAFETY: the block owns its bytes exclusively and they are plain memory.
+#[cfg(feature = "alloc")]
+unsafe impl Send for HeapBlock {}
+// SAFETY: shared access only reads the pointer and the size.
+#[cfg(feature = "alloc")]
+unsafe impl Sync for HeapBlock {}
+
+#[cfg(feature = "alloc")]
+impl HeapBlock {
+    /// Alignment of the block itself. The arena aligns every piece on its
+    /// own, so this only saves a little padding at the start.
+    const ALIGN: usize = 16;
+
+    /// Takes `bytes` from the heap. Fails when the system has no such block
+    /// to give.
+    pub fn new(bytes: usize) -> Result<Self, Full<()>> {
+        let layout = Layout::from_size_align(bytes, Self::ALIGN).map_err(|_| Full(()))?;
+        if bytes == 0 {
+            return Ok(Self {
+                start: NonNull::dangling(),
+                layout,
+            });
+        }
+        // SAFETY: the layout has a non-zero size.
+        let start = NonNull::new(unsafe { alloc(layout) }).ok_or(Full(()))?;
+        Ok(Self { start, layout })
+    }
+
+    /// Size of the block in bytes.
+    #[inline]
+    pub const fn capacity(&self) -> usize {
+        self.layout.size()
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Deref for HeapBlock {
+    type Target = [MaybeUninit<u8>];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: `start` is valid for `layout.size()` bytes (or dangling
+        // with size zero), and `MaybeUninit<u8>` needs no initialisation.
+        unsafe { slice::from_raw_parts(self.start.as_ptr().cast(), self.layout.size()) }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl DerefMut for HeapBlock {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: as in `deref`, and `&mut self` makes the access exclusive.
+        unsafe { slice::from_raw_parts_mut(self.start.as_ptr().cast(), self.layout.size()) }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Drop for HeapBlock {
+    fn drop(&mut self) {
+        if self.layout.size() > 0 {
+            // SAFETY: `start` came from `alloc` with this same layout and is
+            // freed exactly once.
+            unsafe { dealloc(self.start.as_ptr(), self.layout) };
+        }
     }
 }

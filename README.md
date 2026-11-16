@@ -3,7 +3,7 @@
 vas is a collection of data containers, structures and algorithms for game development in Rust focused on speed and memory control.
 
 - `no_std`, zero dependencies
-- never allocates: every container works on memory you provide
+- never allocates: every container works on memory you provide (the optional `alloc` feature adds heap blocks you ask for by size)
 - never panics: fallible operations return `Result` / `Option`
 
 ```rust
@@ -21,6 +21,7 @@ Memory:
 
 - `Memory`: an inline block for one container
 - `Arena`: one big block shared by many containers and values
+- `Arena::from_heap(bytes)`, `HeapBlock`: that block from the heap (`alloc` feature, off by default)
 
 Containers so far:
 

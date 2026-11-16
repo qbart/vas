@@ -39,7 +39,9 @@ allocator straight to the container.
 ## Arena
 
 To pack many containers and values into one block, and to keep containers in
-structs without a lifetime parameter, see [arena](arena.md).
+structs without a lifetime parameter, see [arena](arena.md). With the
+optional `alloc` feature, `Arena::from_heap(bytes)` takes that block from the
+heap in one call.
 
 ## Example
 

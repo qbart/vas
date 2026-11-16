@@ -69,6 +69,40 @@ then carry the block's lifetime: `Particles<'level>`.
 A block can also come from your own allocator or the operating system: any
 `&mut [MaybeUninit<u8>]` works.
 
+## Blocks from the heap (`alloc` feature)
+
+Off by default. Enable it with `vas = { version = "...", features = ["alloc"] }`.
+The crate stays `no_std` and dependency free; the feature only uses the
+global allocator of your program, and only when you call one of the two
+functions below. Nothing else in vas allocates.
+
+**For the whole program.** `Arena::from_heap(bytes)` takes the block once and
+never returns it. Pieces are `'static`, exactly as with `StaticBlock`, and
+the size can be chosen at run time:
+
+```rust
+let arena = Arena::from_heap(20 << 20)?; // 20 MB
+let particles = Particles {
+    x: Vector::new(arena.alloc(100_000)?),
+    y: Vector::new(arena.alloc(100_000)?),
+};
+```
+
+**For a level or a loading screen.** `arena::HeapBlock::new(bytes)` owns the
+block and returns it to the system when dropped. Structs built on it carry
+its lifetime. Reuse it by building a new arena on it:
+
+```rust
+let mut block = HeapBlock::new(1 << 20)?;
+for level in levels {
+    let arena = Arena::new(&mut block);
+    let state = Level::new(&arena)?; // Level<'_>
+}
+```
+
+Both return `Err(Full(()))` when the system cannot provide the block; they
+never panic or abort. The block is aligned to 16 bytes.
+
 ## Freeing and starting over
 
 - Individual pieces are never freed.
@@ -90,10 +124,12 @@ A block can also come from your own allocator or the operating system: any
 | one value | `alloc_value(T) -> Result<&'a mut T, Full<T>>` | returns the value when it does not fit; never dropped |
 | copy of a slice | `alloc_copy(&[T]) -> Result<&'a mut [T], Full<()>>` | `T: Copy` |
 | budget | `sub(bytes) -> Result<Arena<'a>, Full<()>>` | splits off part as its own arena |
+| heap, forever | `Arena::from_heap(bytes) -> Result<Arena<'static>, Full<()>>` | `alloc` feature; never freed |
+| heap, owned | `HeapBlock::new(bytes) -> Result<HeapBlock, Full<()>>`, `capacity()` | `alloc` feature; freed on drop; derefs to `[MaybeUninit<u8>]` |
 | static block | `StaticBlock::<N>::new()`, `take() -> Option<&'static mut [MaybeUninit<u8>]>` | declare as a `static`; taken once |
 
 ## Guarantees
 
-- No allocation, no panics.
+- No allocation unless `from_heap` or `HeapBlock::new` is called; no panics.
 - Pieces are disjoint and correctly aligned.
 - A failed request changes nothing.

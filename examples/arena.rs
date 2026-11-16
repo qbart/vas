@@ -1,5 +1,5 @@
 //! One block of memory for the whole game. Run with
-//! `cargo run --example arena`.
+//! `cargo run --example arena --features alloc`.
 
 use std::error::Error;
 
@@ -73,6 +73,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(world.enemies.get(goblin), Some(&"goblin"));
     assert_eq!(world.item_names.get(&7), Some(&"sword"));
     assert_eq!(*world.score, 10);
+
+    // The same from the heap, with the size chosen at run time. Needs the
+    // `alloc` feature.
+    #[cfg(feature = "alloc")]
+    {
+        let megabytes = 20;
+        let arena = Arena::from_heap(megabytes << 20)?;
+        let particles = Particles::new(&arena, 100_000)?;
+        assert_eq!(particles.life.capacity(), 100_000);
+
+        // A block that is given back: one per level, reused or dropped.
+        let mut level_memory = vas::arena::HeapBlock::new(1 << 20)?;
+        for level in 0..3 {
+            let arena = Arena::new(&mut level_memory);
+            let mut spawns = Vector::new(arena.alloc::<u32>(256)?);
+            spawns.push(level)?;
+        }
+        println!("heap: ok");
+    }
 
     println!("arena: ok");
     Ok(())
