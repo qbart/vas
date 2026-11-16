@@ -82,12 +82,11 @@
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
-- [ ] Usage examples, compiled with the checks
-- [ ] CI
+- [x] Usage examples, compiled and run by `make check` (`examples/`)
+- [x] CI: `make check` and Miri on every push (`.github/workflows/ci.yml`)
 
 ## Later
 
 - [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
-
 - [ ] Red-black tree
 - [ ] Allocator trait for containers that grow on their own

@@ -1,4 +1,4 @@
-.PHONY: build release test lint fmt check miri bench publish clean
+.PHONY: build release test lint fmt examples check miri bench publish clean
 
 build:
 	cargo build
@@ -15,7 +15,10 @@ lint:
 fmt:
 	cargo fmt
 
-check: lint test
+examples:
+	for example in containers hierarchy pathfinding spatial; do cargo run -q --example $$example || exit 1; done
+
+check: lint test examples
 	cargo fmt --check
 
 miri:

@@ -1,0 +1,77 @@
+//! The general-purpose containers. Run with `cargo run --example containers`.
+
+use std::error::Error;
+
+use vas::bitset::words;
+use vas::pool::Slot;
+use vas::{Bitset, Deque, Heap, Map, Memory, OrderedMap, Pool, Rng, Vector};
+
+fn main() -> Result<(), Box<dyn Error>> {
+    // Vector: a contiguous block, e.g. vertices to hand to a renderer.
+    let mut memory = Memory::<f32, 1024>::new();
+    let mut vertices = Vector::new(&mut memory);
+    vertices.push(1.0)?;
+    vertices.extend_from_slice(&[2.0, 3.0, 4.0])?;
+    assert_eq!(vertices.as_slice(), &[1.0, 2.0, 3.0, 4.0]);
+
+    // Growing: get a bigger block and move into it.
+    let mut bigger = Memory::<f32, 4096>::new();
+    let vertices = vertices
+        .move_into(&mut bigger)
+        .map_err(|_| "block too small")?;
+    assert_eq!(vertices.capacity(), 4096);
+
+    // Pool: values with stable handles that detect removal.
+    let mut memory = Memory::<Slot<&str>, 64>::new();
+    let mut enemies = Pool::new(&mut memory);
+    let goblin = enemies.insert("goblin")?;
+    assert_eq!(enemies.get(goblin), Some(&"goblin"));
+    enemies.remove(goblin);
+    assert_eq!(enemies.get(goblin), None); // stale handle
+
+    // Map: unordered key -> value.
+    let mut memory = Memory::<vas::map::Slot<u32, &str>, 64>::new();
+    let mut items = Map::new(&mut memory);
+    items.insert(7, "sword")?;
+    assert_eq!(items.get(&7), Some(&"sword"));
+
+    // OrderedMap: sorted keys, nearest-key lookups.
+    let mut memory = Memory::<(u32, &str), 16>::new();
+    let mut keyframes = OrderedMap::new(&mut memory);
+    keyframes.insert(20, "jump")?;
+    keyframes.insert(0, "idle")?;
+    keyframes.insert(10, "step")?;
+    assert_eq!(keyframes.at_or_before(&15), Some((&10, &"step")));
+
+    // Deque: a queue, or a "keep the last N" history.
+    let mut memory = Memory::<u32, 3>::new();
+    let mut frame_times = Deque::new(&mut memory);
+    for time in [16, 17, 15, 33] {
+        frame_times.push_overwrite(time);
+    }
+    assert!(frame_times.iter().copied().eq([17, 15, 33]));
+
+    // Heap: the most urgent item first.
+    let mut memory = Memory::<u32, 16>::new();
+    let mut timers = Heap::min(&mut memory);
+    for due in [50, 10, 30] {
+        timers.push(due)?;
+    }
+    assert_eq!(timers.pop(), Some(10));
+
+    // Bitset: a compact set of small integers.
+    let mut memory = Memory::<u64, { words(1000) }>::new();
+    let mut visited = Bitset::new(&mut memory);
+    visited.insert(42)?;
+    assert!(visited.contains(42));
+    assert_eq!(visited.first_clear(), Some(0));
+
+    // Rng: reproducible randomness.
+    let mut rng = Rng::new(42);
+    let roll = rng.u32_below(6) + 1;
+    assert!((1..=6).contains(&roll));
+    assert_eq!(Rng::new(42).u32_below(6) + 1, roll);
+
+    println!("containers: ok");
+    Ok(())
+}

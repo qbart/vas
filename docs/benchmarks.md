@@ -20,7 +20,7 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Pool` | `Vec<Option<Box<T>>>` | about 9x faster (no allocation per value) |
 | `Map`, 2k keys | `HashMap` with the same hasher | faster inserts, hits level, misses slower |
 | `Map`, 50k keys | `HashMap` with the same hasher | 1.5x to 3x slower |
-| `Map` | `HashMap` with its default hasher | faster inserts, hits level at 50k and faster at 2k |
+| `Map` | `HashMap` with its default hasher | faster inserts; hits level at 50k and faster at 2k; misses 2x slower at 50k |
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
 | `Bitset` | `Vec<bool>` | 2x slower per operation, 8x less memory |

@@ -40,4 +40,7 @@ Algorithms so far:
 - `Rng`: seedable pseudo-random number generator
 - `PathFinder`: A* / Dijkstra shortest path
 
-Specs are in [docs](docs), progress in [ROADMAP.md](ROADMAP.md).
+Runnable samples for every structure are in [examples](examples); run one
+with `cargo run --example containers` (or `hierarchy`, `pathfinding`,
+`spatial`). Specs are in [docs](docs), measurements in
+[docs/benchmarks.md](docs/benchmarks.md), progress in [ROADMAP.md](ROADMAP.md).
