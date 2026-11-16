@@ -67,15 +67,17 @@
 - [x] `Aabb`: axis-aligned box in any dimension
 - [x] `SpatialGrid`: uniform grid with box and radius queries
 
+## 0.15.0 — quadtree and octree
+
+- [x] `Quadtree` / `Octree`: one implementation (`Orthtree`) for any dimension
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.15.0 — Quadtree
-- [ ] 0.16.0 — Octree
-- [ ] 0.17.0 — BVH
-- [ ] 0.18.0 — k-d tree
+- [ ] 0.16.0 — BVH
+- [ ] 0.17.0 — k-d tree
 
 ## Later
 
