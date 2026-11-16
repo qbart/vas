@@ -162,9 +162,9 @@ impl<'a> Arena<'a> {
 ///
 /// ```
 /// use vas::arena::StaticBlock;
-/// use vas::{Arena, Vector};
+/// use vas::{Arena, MB, Vector};
 ///
-/// static GAME_MEMORY: StaticBlock<{ 1 << 20 }> = StaticBlock::new(); // 1 MB
+/// static GAME_MEMORY: StaticBlock<{ MB }> = StaticBlock::new();
 ///
 /// struct World {
 ///     positions: Vector<'static, [f32; 2]>, // no lifetime parameter needed
@@ -245,7 +245,7 @@ impl Arena<'static> {
     /// Fails when the system has no such block to give.
     ///
     /// ```
-    /// use vas::{Arena, Vector};
+    /// use vas::{Arena, MB, Vector};
     ///
     /// struct Particles {
     ///     x: Vector<'static, f32>,
@@ -253,7 +253,7 @@ impl Arena<'static> {
     /// }
     ///
     /// # fn main() -> Result<(), vas::Full<()>> {
-    /// let arena = Arena::from_heap(20 << 20)?; // 20 MB
+    /// let arena = Arena::from_heap(20 * MB)?;
     /// let particles = Particles {
     ///     x: Vector::new(arena.alloc(100_000)?),
     ///     y: Vector::new(arena.alloc(100_000)?),
@@ -283,10 +283,10 @@ impl Arena<'static> {
 ///
 /// ```
 /// use vas::arena::HeapBlock;
-/// use vas::{Arena, Vector};
+/// use vas::{Arena, MB, Vector};
 ///
 /// # fn main() -> Result<(), vas::Full<()>> {
-/// let mut block = HeapBlock::new(1 << 20)?; // 1 MB
+/// let mut block = HeapBlock::new(MB)?;
 /// for level in 0..3 {
 ///     let arena = Arena::new(&mut block);
 ///     let mut enemies = Vector::new(arena.alloc::<u32>(1000)?);

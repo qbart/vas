@@ -88,6 +88,10 @@
 
 - [x] `alloc` feature (off by default): `Arena::from_heap`, `arena::HeapBlock`
 
+## 0.20.0 — size units
+
+- [x] `KB`, `MB`, `GB` constants: `Arena::from_heap(20 * MB)`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

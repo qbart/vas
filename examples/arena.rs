@@ -5,10 +5,10 @@ use std::error::Error;
 
 use vas::arena::StaticBlock;
 use vas::pool::Slot;
-use vas::{Arena, Full, Map, Pool, Vector};
+use vas::{Arena, Full, MB, Map, Pool, Vector};
 
 /// 20 MB for everything, living as long as the program.
-static GAME_MEMORY: StaticBlock<{ 20 << 20 }> = StaticBlock::new();
+static GAME_MEMORY: StaticBlock<{ 20 * MB }> = StaticBlock::new();
 
 /// A struct of arrays. The block is `'static`, so no lifetime parameter.
 struct Particles {
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let arena = Arena::new(GAME_MEMORY.take().ok_or("game memory already taken")?);
 
         // Give one system a fixed budget of its own.
-        let audio = arena.sub(1 << 20)?;
+        let audio = arena.sub(MB)?;
         let samples = Vector::<i16>::new(audio.alloc(48_000)?);
         assert_eq!(samples.capacity(), 48_000);
 
@@ -79,12 +79,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "alloc")]
     {
         let megabytes = 20;
-        let arena = Arena::from_heap(megabytes << 20)?;
+        let arena = Arena::from_heap(megabytes * MB)?;
         let particles = Particles::new(&arena, 100_000)?;
         assert_eq!(particles.life.capacity(), 100_000);
 
         // A block that is given back: one per level, reused or dropped.
-        let mut level_memory = vas::arena::HeapBlock::new(1 << 20)?;
+        let mut level_memory = vas::arena::HeapBlock::new(MB)?;
         for level in 0..3 {
             let arena = Arena::new(&mut level_memory);
             let mut spawns = Vector::new(arena.alloc::<u32>(256)?);

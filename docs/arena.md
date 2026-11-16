@@ -30,6 +30,12 @@ let mut positions = Vector::new(arena.alloc::<[f32; 2]>(100)?);
 let mut enemies = Pool::new(arena.alloc::<vas::pool::Slot<Enemy>>(16)?);
 ```
 
+## Sizes
+
+Sizes are byte counts (`usize`). Write them with the units `vas::KB`,
+`vas::MB` and `vas::GB` (powers of 1024): `20 * MB`, `64 * KB`. They are
+constants, so they also work in `StaticBlock<{ 20 * MB }>`.
+
 ## Lifetimes
 
 Pieces live as long as the **block**, not as long as the arena. The arena is
@@ -42,9 +48,9 @@ stored in any struct:
 
 ```rust
 use vas::arena::StaticBlock;
-use vas::{Arena, Vector};
+use vas::{Arena, MB, Vector};
 
-static GAME_MEMORY: StaticBlock<{ 20 << 20 }> = StaticBlock::new(); // 20 MB
+static GAME_MEMORY: StaticBlock<{ 20 * MB }> = StaticBlock::new();
 
 struct Particles {
     x: Vector<'static, f32>,
@@ -81,7 +87,7 @@ never returns it. Pieces are `'static`, exactly as with `StaticBlock`, and
 the size can be chosen at run time:
 
 ```rust
-let arena = Arena::from_heap(20 << 20)?; // 20 MB
+let arena = Arena::from_heap(20 * MB)?;
 let particles = Particles {
     x: Vector::new(arena.alloc(100_000)?),
     y: Vector::new(arena.alloc(100_000)?),
@@ -93,7 +99,7 @@ block and returns it to the system when dropped. Structs built on it carry
 its lifetime. Reuse it by building a new arena on it:
 
 ```rust
-let mut block = HeapBlock::new(1 << 20)?;
+let mut block = HeapBlock::new(MB)?;
 for level in levels {
     let arena = Arena::new(&mut block);
     let state = Level::new(&arena)?; // Level<'_>

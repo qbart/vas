@@ -39,7 +39,10 @@ pub use graph::Graph;
 pub use heap::Heap;
 pub use kd_tree::KdTree;
 pub use map::Map;
+pub use memory::KB;
 pub use memory::Memory;
+#[cfg(not(target_pointer_width = "16"))]
+pub use memory::{GB, MB};
 pub use ordered_map::OrderedMap;
 pub use orthtree::{Octree, Quadtree};
 pub use path::PathFinder;

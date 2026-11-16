@@ -36,6 +36,13 @@ without an allocator a block's size cannot be chosen at run time. For
 run-time sizes, pass a `&mut [MaybeUninit<T>]` obtained from your own
 allocator straight to the container.
 
+## Sizes in bytes
+
+Byte sizes are plain `usize`. The constants `vas::KB`, `vas::MB` and `vas::GB`
+(powers of 1024) make them readable: `20 * MB`. Being constants, they work in
+const generics too, e.g. `StaticBlock<{ 20 * MB }>` or
+`Memory::<u8, { 4 * KB }>`. `MB` and `GB` do not exist on 16-bit targets.
+
 ## Arena
 
 To pack many containers and values into one block, and to keep containers in
