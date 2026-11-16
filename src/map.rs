@@ -273,6 +273,13 @@ impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
     /// Removes and drops all entries.
     pub fn clear(&mut self) {
         self.len = 0;
+        if !mem::needs_drop::<K>() && !mem::needs_drop::<V>() {
+            // Nothing to drop: mark every slot empty without looking at it.
+            for slot in live_mut(&mut self.buffer, self.used).iter_mut() {
+                slot.meta = EMPTY;
+            }
+            return;
+        }
         for slot in live_mut(&mut self.buffer, self.used).iter_mut() {
             if slot.meta != EMPTY {
                 // Mark the slot empty before dropping, so a panicking `Drop`
@@ -317,6 +324,7 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
     /// With dynamic storage the map grows when it gets more than 7/8 full,
     /// so there is no room only when the allocator refuses and every slot
     /// is taken.
+    #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>, Full<(K, V)>> {
         let meta = self.meta_for(&key);
         let capacity = self.used;
@@ -502,7 +510,11 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
 impl<K, V, S: Storage<Slot<K, V>>, H> Drop for Map<K, V, S, H> {
     #[inline]
     fn drop(&mut self) {
-        self.clear();
+        // Storage handed back to the user needs no tidying, so plain data
+        // is left as it is.
+        if mem::needs_drop::<K>() || mem::needs_drop::<V>() {
+            self.clear();
+        }
     }
 }
 

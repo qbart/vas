@@ -152,6 +152,32 @@ fn map<const N: usize>() {
             map.len() as u64
         },
     );
+    #[cfg(feature = "alloc")]
+    bench(
+        &format!("map {N} keys: insert"),
+        "vas::Map (growing)",
+        N,
+        || {
+            let mut map = Map::<u32, u32, vas::Dynamic>::default();
+            for key in &input {
+                let _ = map.insert(*key, *key);
+            }
+            map.len() as u64
+        },
+    );
+    #[cfg(feature = "alloc")]
+    bench(
+        &format!("map {N} keys: insert"),
+        "std HashMap + vas FastHasher (growing)",
+        N,
+        || {
+            let mut map = HashMap::with_hasher(FastState::default());
+            for key in &input {
+                map.insert(*key, *key);
+            }
+            map.len() as u64
+        },
+    );
     bench(
         &format!("map {N} keys: insert"),
         "std HashMap (SipHash)",

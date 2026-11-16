@@ -5,7 +5,7 @@ use core::fmt;
 
 use crate::allocator::Allocator;
 use crate::heap::{Heap, Order};
-use crate::storage::{Dynamic, IntoBuffer, Storage};
+use crate::storage::{Buffer, Dynamic, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// The thing being searched: anything that can list the neighbours of a
@@ -158,6 +158,73 @@ fn node_mut<S: Storage<Node>>(nodes: &mut Vector<Node, S>, index: u32) -> Option
     nodes.get_mut(index)
 }
 
+/// Node memory as the search sees it: fixed (a slice) or growing (a
+/// vector over dynamic storage).
+trait Nodes {
+    /// The search state of node `index`, if there is memory for it.
+    fn node(&mut self, index: u32) -> Option<&mut Node>;
+}
+
+impl Nodes for [Node] {
+    #[inline]
+    fn node(&mut self, index: u32) -> Option<&mut Node> {
+        self.get_mut(index as usize)
+    }
+}
+
+impl<S: Storage<Node>> Nodes for Vector<Node, S> {
+    #[inline]
+    fn node(&mut self, index: u32) -> Option<&mut Node> {
+        node_mut(self, index)
+    }
+}
+
+/// Offers every neighbour of `current` a route through it, and queues the
+/// ones it improves.
+#[inline]
+fn expand<S, N, SO>(
+    space: &S,
+    nodes: &mut N,
+    open: &mut Heap<Open, SO, Cheapest>,
+    current: &Open,
+    goal: u32,
+    stamp: u32,
+) -> Result<(), PathError>
+where
+    S: Space,
+    N: Nodes + ?Sized,
+    SO: Storage<Open>,
+{
+    let mut error = None;
+    space.neighbors(current.node, |next, step| {
+        if error.is_some() || !step.is_finite() || step < 0.0 {
+            return;
+        }
+        let Some(node) = nodes.node(next) else {
+            error = Some(PathError::OutOfBounds);
+            return;
+        };
+        let cost = current.cost + step;
+        if node.stamp == stamp && node.cost <= cost {
+            return;
+        }
+        *node = Node {
+            stamp,
+            parent: current.node,
+            cost,
+        };
+        let entry = Open {
+            priority: cost + space.heuristic(next, goal),
+            cost,
+            node: next,
+        };
+        if open.push(entry).is_err() {
+            error = Some(PathError::Full);
+        }
+    });
+    error.map_or(Ok(()), Err)
+}
+
 impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
     /// Creates a finder for a space of `nodes.len()` nodes, with `open` as
     /// the memory for its open list.
@@ -244,37 +311,21 @@ impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
                 return Ok(current.cost);
             }
 
-            let nodes = &mut self.nodes;
-            let open = &mut self.open;
-            let mut error = None;
-            space.neighbors(current.node, |next, step| {
-                if error.is_some() || !step.is_finite() || step < 0.0 {
-                    return;
-                }
-                let Some(node) = node_mut(nodes, next) else {
-                    error = Some(PathError::OutOfBounds);
-                    return;
-                };
-                let cost = current.cost + step;
-                if node.stamp == stamp && node.cost <= cost {
-                    return;
-                }
-                *node = Node {
+            // With fixed storage the nodes are a plain slice for the whole
+            // search, which is measurably faster than going through the
+            // vector for every neighbour.
+            if <SN::Buffer as Buffer<Node>>::GROWS {
+                expand(
+                    space,
+                    &mut self.nodes,
+                    &mut self.open,
+                    &current,
+                    goal,
                     stamp,
-                    parent: current.node,
-                    cost,
-                };
-                let entry = Open {
-                    priority: cost + space.heuristic(next, goal),
-                    cost,
-                    node: next,
-                };
-                if open.push(entry).is_err() {
-                    error = Some(PathError::Full);
-                }
-            });
-            if let Some(error) = error {
-                return Err(error);
+                )?;
+            } else {
+                let nodes = self.nodes.as_mut_slice();
+                expand(space, nodes, &mut self.open, &current, goal, stamp)?;
             }
         }
         Err(PathError::NoPath)
