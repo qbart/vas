@@ -84,23 +84,25 @@ fn heap_block_moves_between_threads() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn from_heap_is_static() {
-    let arena = Arena::from_heap(1 << 16);
-    assert!(arena.is_ok());
-    if let Ok(arena) = arena {
-        assert_eq!(arena.capacity(), 1 << 16);
-        let particles = (arena.alloc(1000), arena.alloc(1000));
-        drop(arena);
-        if let (Ok(x), Ok(y)) = particles {
-            let mut particles = Particles {
-                x: Vector::new(x),
-                y: Vector::new(y),
-            };
-            assert!(particles.x.push(1.0).is_ok());
-            assert!(particles.y.push(2.0).is_ok());
-            assert_eq!(particles.x.capacity(), 1000);
-            assert_eq!(particles.y.as_slice(), &[2.0]);
-        } else {
-            assert!(particles.0.is_ok() && particles.1.is_ok());
-        }
+    // The arena goes out of scope here; its pieces stay valid.
+    let particles = {
+        let arena = Arena::from_heap(1 << 16);
+        assert!(arena.is_ok());
+        arena.map(|arena| {
+            assert_eq!(arena.capacity(), 1 << 16);
+            (arena.alloc(1000), arena.alloc(1000))
+        })
+    };
+    if let Ok((Ok(x), Ok(y))) = particles {
+        let mut particles = Particles {
+            x: Vector::new(x),
+            y: Vector::new(y),
+        };
+        assert!(particles.x.push(1.0).is_ok());
+        assert!(particles.y.push(2.0).is_ok());
+        assert_eq!(particles.x.capacity(), 1000);
+        assert_eq!(particles.y.as_slice(), &[2.0]);
+    } else {
+        assert!(particles.is_ok_and(|(x, y)| x.is_ok() && y.is_ok()));
     }
 }
