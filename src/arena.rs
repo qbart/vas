@@ -304,6 +304,11 @@ pub struct HeapBlock {
     layout: Layout,
 }
 
+/// Only its alignment is used: that of every [`HeapBlock`].
+#[cfg(feature = "alloc")]
+#[repr(align(16))]
+struct Aligned(#[allow(dead_code)] [u8; 16]);
+
 // SAFETY: the block owns its bytes exclusively and they are plain memory.
 #[cfg(feature = "alloc")]
 unsafe impl Send for HeapBlock {}
@@ -315,7 +320,7 @@ unsafe impl Sync for HeapBlock {}
 impl HeapBlock {
     /// Alignment of the block itself. The arena aligns every piece on its
     /// own, so this only saves a little padding at the start.
-    const ALIGN: usize = 16;
+    const ALIGN: usize = align_of::<Aligned>();
 
     /// Takes `bytes` from the heap. Fails when the system has no such block
     /// to give.
@@ -323,7 +328,8 @@ impl HeapBlock {
         let layout = Layout::from_size_align(bytes, Self::ALIGN).map_err(|_| Full(()))?;
         if bytes == 0 {
             return Ok(Self {
-                start: NonNull::dangling(),
+                // Aligned like a real block, so empty requests still work.
+                start: NonNull::<Aligned>::dangling().cast(),
                 layout,
             });
         }
