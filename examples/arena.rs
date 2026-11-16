@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Give one system a fixed budget of its own.
         let audio = arena.sub(MB(1))?;
-        let samples = Vector::<i16>::new(audio.alloc(48_000)?);
+        let samples = Vector::<i16, _>::new(audio.alloc(48_000)?);
         assert_eq!(samples.capacity(), 48_000);
 
         let world = World::new(&arena)?;

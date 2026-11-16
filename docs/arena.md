@@ -49,13 +49,13 @@ stored in any struct:
 
 ```rust
 use vas::arena::StaticBlock;
-use vas::{Arena, MB, Vector};
+use vas::{Arena, Borrowed, MB, Vector};
 
 static GAME_MEMORY: StaticBlock<{ MB(20) }> = StaticBlock::new();
 
 struct Particles {
-    x: Vector<'static, f32>,
-    y: Vector<'static, f32>,
+    x: Vector<f32, Borrowed<'static>>,
+    y: Vector<f32, Borrowed<'static>>,
 }
 
 let arena = Arena::new(GAME_MEMORY.take().ok_or("already taken")?);

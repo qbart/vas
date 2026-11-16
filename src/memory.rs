@@ -72,6 +72,11 @@ impl<T, const N: usize> Memory<T, N> {
         }
     }
 
+    #[inline]
+    pub(crate) fn into_slots(self) -> [MaybeUninit<T>; N] {
+        self.slots
+    }
+
     /// Number of values the block has room for.
     #[inline]
     pub const fn capacity(&self) -> usize {

@@ -49,7 +49,7 @@ fn vector() {
     const N: usize = 100_000;
     let mut memory = block::<u64>(N);
     bench("push 100k u64", "vas::Vector", N, || {
-        let mut v = Vector::new(&mut memory);
+        let mut v = Vector::new(&mut memory[..]);
         for i in 0..N as u64 {
             let _ = v.push(black_box(i));
         }

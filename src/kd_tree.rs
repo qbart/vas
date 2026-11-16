@@ -2,6 +2,7 @@
 
 use crate::Vector;
 use crate::aabb::{Aabb, distance_squared};
+use crate::storage::Storage;
 
 /// A search result: the index of an item in [`KdTree::items`] and its
 /// squared distance from the query point.
@@ -107,7 +108,11 @@ impl<'a, T, const D: usize> KdTree<'a, T, D> {
     /// Finds the points nearest to `target` and writes them to `out`,
     /// nearest first. `out` is cleared first, and its capacity is how many
     /// are wanted.
-    pub fn nearest_k(&self, target: &[f32; D], out: &mut Vector<'_, Neighbor>) {
+    pub fn nearest_k<S: Storage<Neighbor>>(
+        &self,
+        target: &[f32; D],
+        out: &mut Vector<Neighbor, S>,
+    ) {
         out.clear();
         if out.capacity() == 0 {
             return;

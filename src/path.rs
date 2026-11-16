@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, slice};
 
 use crate::heap::{Heap, Order};
+use crate::storage::Storage;
 use crate::{Full, Vector};
 
 /// The thing being searched: anything that can list the neighbours of a
@@ -272,7 +273,7 @@ impl<'a> PathFinder<'a> {
     /// returns the number of nodes written (0 when no path was found).
     ///
     /// Leaves `out` unchanged when the path does not fit.
-    pub fn path_into(&self, out: &mut Vector<'_, u32>) -> Result<usize, Full<()>> {
+    pub fn path_into<S: Storage<u32>>(&self, out: &mut Vector<u32, S>) -> Result<usize, Full<()>> {
         let before = out.len();
         for node in self.path_rev() {
             if out.push(node).is_err() {

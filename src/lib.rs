@@ -25,6 +25,7 @@ pub mod pool;
 pub mod random;
 pub mod spatial_grid;
 pub mod static_graph;
+pub mod storage;
 pub mod tree;
 pub mod vector;
 
@@ -50,5 +51,6 @@ pub use pool::{Handle, Pool};
 pub use random::Rng;
 pub use spatial_grid::SpatialGrid;
 pub use static_graph::StaticGraph;
+pub use storage::{Borrowed, Inline};
 pub use tree::Tree;
 pub use vector::Vector;

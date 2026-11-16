@@ -1,4 +1,4 @@
-//! Fixed-capacity vector over user-provided memory.
+//! Fixed-capacity vector over borrowed or inline memory.
 
 #![allow(unsafe_code)]
 
@@ -6,36 +6,81 @@ use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, ptr, slice};
 
+use crate::storage::{Buffer, Inline, IntoBuffer, Storage};
 use crate::{Full, InsertError};
 
-/// A fixed-capacity, contiguous vector that lives in memory provided by the
-/// caller.
+/// A fixed-capacity, contiguous vector.
 ///
-/// The capacity is the length of the storage slice and never changes. The
-/// contents are always one contiguous block, available through
-/// [`as_slice`](Self::as_slice).
+/// The storage parameter `S` decides where the elements live (see
+/// [`storage`](crate::storage)):
+///
+/// - `Vector<T, Borrowed<'a>>` uses memory provided by the caller.
+/// - `Vector<T, Inline<N>>` holds room for `N` elements itself.
+///
+/// The capacity never changes. The contents are always one contiguous
+/// block, available through [`as_slice`](Self::as_slice).
 ///
 /// ```
-/// use core::mem::MaybeUninit;
-/// use vas::Vector;
+/// use vas::{Inline, Memory, Vector};
 ///
-/// let mut memory = [MaybeUninit::<u32>::uninit(); 4];
+/// // Borrowed: pass a reference to the memory.
+/// let mut memory = Memory::<u32, 4>::new();
 /// let mut v = Vector::new(&mut memory);
 /// assert!(v.push(1).is_ok());
 /// assert!(v.push(2).is_ok());
 /// assert_eq!(v.as_slice(), &[1, 2]);
+///
+/// // Inline: the vector owns its memory, so it can be a struct field.
+/// struct Particles {
+///     x: Vector<f32, Inline<1024>>,
+///     y: Vector<f32, Inline<1024>>,
+/// }
+/// let particles = Particles { x: Vector::inline(), y: Vector::inline() };
+/// assert_eq!(particles.x.capacity() + particles.y.capacity(), 2048);
 /// ```
-pub struct Vector<'a, T> {
-    // Invariant: `len <= storage.len()` and `storage[..len]` is initialised.
-    storage: &'a mut [MaybeUninit<T>],
+pub struct Vector<T, S: Storage<T>> {
+    // Invariant: `len <= buffer.slots().len()` and the first `len` slots
+    // are initialised.
+    buffer: S::Buffer,
     len: usize,
 }
 
-impl<'a, T> Vector<'a, T> {
-    /// Creates an empty vector using `storage` as its memory.
+impl<T, const N: usize> Vector<T, Inline<N>> {
+    /// Creates an empty vector with room for `N` elements inside itself.
+    ///
+    /// Unlike [`new`](Self::new) this is `const`, so it can initialise a
+    /// `static`.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
-        Self { storage, len: 0 }
+    pub const fn inline() -> Self {
+        Self {
+            buffer: [const { MaybeUninit::uninit() }; N],
+            len: 0,
+        }
+    }
+}
+
+impl<T, const N: usize> Default for Vector<T, Inline<N>> {
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<T, S: Storage<T>> Vector<T, S> {
+    /// Creates an empty vector on `buffer`.
+    ///
+    /// Pass a reference (`&mut Memory`, `&mut [MaybeUninit<T>]`, a piece of
+    /// an arena) to borrow the memory, or a value (`Memory::new()`) to store
+    /// it inside the vector.
+    #[inline]
+    pub fn new<B>(buffer: B) -> Self
+    where
+        B: IntoBuffer<T, Storage = S>,
+    {
+        Self {
+            buffer: buffer.into_buffer(),
+            len: 0,
+        }
     }
 
     /// Number of elements in the vector.
@@ -46,14 +91,14 @@ impl<'a, T> Vector<'a, T> {
 
     /// Maximum number of elements the vector can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
-        self.storage.len()
+    pub fn capacity(&self) -> usize {
+        self.buffer.slots().len()
     }
 
     /// Number of elements that can still be pushed.
     #[inline]
-    pub const fn remaining(&self) -> usize {
-        self.storage.len() - self.len
+    pub fn remaining(&self) -> usize {
+        self.capacity() - self.len
     }
 
     /// `true` when the vector holds no elements.
@@ -64,14 +109,14 @@ impl<'a, T> Vector<'a, T> {
 
     /// `true` when no more elements can be pushed.
     #[inline]
-    pub const fn is_full(&self) -> bool {
-        self.len == self.storage.len()
+    pub fn is_full(&self) -> bool {
+        self.len == self.capacity()
     }
 
     /// Appends `value`, or hands it back in [`Full`] when there is no room.
     #[inline]
     pub fn push(&mut self, value: T) -> Result<(), Full<T>> {
-        match self.storage.get_mut(self.len) {
+        match self.buffer.slots_mut().get_mut(self.len) {
             Some(slot) => {
                 slot.write(value);
                 self.len += 1;
@@ -91,7 +136,12 @@ impl<'a, T> Vector<'a, T> {
         // SAFETY: the slot at the old `len - 1` is in bounds and initialised
         // by the invariant; `len` was decremented first, so the value is
         // moved out exactly once.
-        Some(unsafe { self.storage.get_unchecked(self.len).assume_init_read() })
+        Some(unsafe {
+            self.buffer
+                .slots()
+                .get_unchecked(self.len)
+                .assume_init_read()
+        })
     }
 
     /// Appends all of `values` with a single copy, or nothing when they do
@@ -105,8 +155,8 @@ impl<'a, T> Vector<'a, T> {
             return Err(Full(()));
         }
         // SAFETY: `len + values.len() <= capacity`, so the destination range
-        // is inside the storage. `values` is a shared borrow and the storage
-        // is exclusively borrowed, so the ranges cannot overlap.
+        // is inside the buffer. `values` is a shared borrow and the buffer
+        // is reached through `&mut self`, so the ranges cannot overlap.
         unsafe {
             ptr::copy_nonoverlapping(
                 values.as_ptr(),
@@ -138,7 +188,7 @@ impl<'a, T> Vector<'a, T> {
             self.truncate(len);
             return Ok(());
         }
-        let Some(slots) = self.storage.get_mut(self.len..len) else {
+        let Some(slots) = self.buffer.slots_mut().get_mut(self.len..len) else {
             return Err(Full(()));
         };
         for slot in slots {
@@ -196,30 +246,33 @@ impl<'a, T> Vector<'a, T> {
         Some(value)
     }
 
-    /// Moves all elements into `storage` with a single copy and returns a
-    /// vector over it, leaving the old storage free. This is how a vector
-    /// "grows": get a bigger block, then move into it.
+    /// Moves all elements onto `buffer` with a single copy and returns a
+    /// vector over it, leaving the old memory free. This is how a vector
+    /// "grows": get a bigger block, then move into it. It can also change
+    /// the kind of storage, for example from borrowed to inline.
     ///
-    /// Hands the vector back unchanged when `storage` is too small.
+    /// Hands the vector back unchanged when `buffer` is too small.
     #[inline]
-    pub fn move_into<'b>(
-        mut self,
-        storage: &'b mut [MaybeUninit<T>],
-    ) -> Result<Vector<'b, T>, Full<Self>> {
+    pub fn move_into<B>(mut self, buffer: B) -> Result<Vector<T, B::Storage>, Full<Self>>
+    where
+        B: IntoBuffer<T>,
+    {
         let len = self.len;
-        if storage.len() < len {
+        let mut buffer = buffer.into_buffer();
+        let slots = buffer.slots_mut();
+        if slots.len() < len {
             return Err(Full(self));
         }
         // SAFETY: the source holds `len` initialised elements and the
-        // destination has room for at least `len`. Both are exclusive
-        // borrows, so they cannot overlap. Setting `self.len` to zero
+        // destination has room for at least `len`. They are two separate
+        // buffers, so they cannot overlap. Setting `self.len` to zero
         // afterwards transfers ownership of the elements: the old vector
         // drops nothing.
         unsafe {
-            ptr::copy_nonoverlapping(self.as_mut_ptr(), storage.as_mut_ptr().cast::<T>(), len);
+            ptr::copy_nonoverlapping(self.as_mut_ptr(), slots.as_mut_ptr().cast::<T>(), len);
         }
         self.len = 0;
-        Ok(Vector { storage, len })
+        Ok(Vector { buffer, len })
     }
 
     /// Removes the element at `index` in O(1) by moving the last element
@@ -274,33 +327,34 @@ impl<'a, T> Vector<'a, T> {
 
     /// The contents as one contiguous slice.
     #[inline]
-    pub const fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[T] {
         // SAFETY: the first `len` slots are initialised by the invariant and
         // `MaybeUninit<T>` has the same layout as `T`.
-        unsafe { slice::from_raw_parts(self.storage.as_ptr().cast::<T>(), self.len) }
+        unsafe { slice::from_raw_parts(self.buffer.slots().as_ptr().cast::<T>(), self.len) }
     }
 
     /// The contents as one contiguous mutable slice.
     #[inline]
-    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
         // SAFETY: as in `as_slice`, and `self` is borrowed exclusively.
-        unsafe { slice::from_raw_parts_mut(self.storage.as_mut_ptr().cast::<T>(), self.len) }
+        let len = self.len;
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), len) }
     }
 
     #[inline]
-    const fn as_mut_ptr(&mut self) -> *mut T {
-        self.storage.as_mut_ptr().cast::<T>()
+    fn as_mut_ptr(&mut self) -> *mut T {
+        self.buffer.slots_mut().as_mut_ptr().cast::<T>()
     }
 }
 
-impl<T> Drop for Vector<'_, T> {
+impl<T, S: Storage<T>> Drop for Vector<T, S> {
     #[inline]
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<T> Deref for Vector<'_, T> {
+impl<T, S: Storage<T>> Deref for Vector<T, S> {
     type Target = [T];
 
     #[inline]
@@ -309,14 +363,14 @@ impl<T> Deref for Vector<'_, T> {
     }
 }
 
-impl<T> DerefMut for Vector<'_, T> {
+impl<T, S: Storage<T>> DerefMut for Vector<T, S> {
     #[inline]
     fn deref_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Vector<'_, T> {
+impl<T: fmt::Debug, S: Storage<T>> fmt::Debug for Vector<T, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.as_slice(), f)
     }

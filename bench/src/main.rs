@@ -43,7 +43,7 @@ fn vector() {
     let group = "push 100k u64";
     let mut memory = block::<u64>(N);
     bench(group, "vas::Vector", N, || {
-        let mut v = Vector::new(&mut memory);
+        let mut v = Vector::new(&mut memory[..]);
         for i in 0..N as u64 {
             let _ = v.push(black_box(i));
         }

@@ -162,12 +162,12 @@ impl<'a> Arena<'a> {
 ///
 /// ```
 /// use vas::arena::StaticBlock;
-/// use vas::{Arena, MB, Vector};
+/// use vas::{Arena, Borrowed, MB, Vector};
 ///
 /// static GAME_MEMORY: StaticBlock<{ MB(1) }> = StaticBlock::new();
 ///
 /// struct World {
-///     positions: Vector<'static, [f32; 2]>, // no lifetime parameter needed
+///     positions: Vector<[f32; 2], Borrowed<'static>>, // no lifetime parameter needed
 /// }
 ///
 /// if let Some(block) = GAME_MEMORY.take() {
@@ -245,11 +245,11 @@ impl Arena<'static> {
     /// Fails when the system has no such block to give.
     ///
     /// ```
-    /// use vas::{Arena, MB, Vector};
+    /// use vas::{Arena, Borrowed, MB, Vector};
     ///
     /// struct Particles {
-    ///     x: Vector<'static, f32>,
-    ///     y: Vector<'static, f32>,
+    ///     x: Vector<f32, Borrowed<'static>>,
+    ///     y: Vector<f32, Borrowed<'static>>,
     /// }
     ///
     /// # fn main() -> Result<(), vas::Full<()>> {

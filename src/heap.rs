@@ -7,7 +7,7 @@ use core::fmt;
 use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr;
 
-use crate::{Full, Vector};
+use crate::{Borrowed, Full, Vector};
 
 /// Decides which element a [`Heap`] hands out first: the one that compares
 /// [`Greater`](Ordering::Greater) than all others.
@@ -80,14 +80,14 @@ impl<T, F: Fn(&T, &T) -> Ordering> Order<T> for F {
 pub struct Heap<'a, T, O = Max> {
     // Invariant (heap property): no element is greater, by `order`, than its
     // parent at `(index - 1) / 2`.
-    items: Vector<'a, T>,
+    items: Vector<T, Borrowed<'a>>,
     order: O,
 }
 
 impl<'a, T: Ord> Heap<'a, T, Max> {
     /// Creates an empty heap that pops the largest element first.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
+    pub fn new(storage: &'a mut [MaybeUninit<T>]) -> Self {
         Self::with_order(storage, Max)
     }
 }
@@ -95,7 +95,7 @@ impl<'a, T: Ord> Heap<'a, T, Max> {
 impl<'a, T: Ord> Heap<'a, T, Min> {
     /// Creates an empty heap that pops the smallest element first.
     #[inline]
-    pub const fn min(storage: &'a mut [MaybeUninit<T>]) -> Self {
+    pub fn min(storage: &'a mut [MaybeUninit<T>]) -> Self {
         Self::with_order(storage, Min)
     }
 }
@@ -104,7 +104,7 @@ impl<'a, T, O> Heap<'a, T, O> {
     /// Creates an empty heap that pops first whichever element `order`
     /// ranks greatest.
     #[inline]
-    pub const fn with_order(storage: &'a mut [MaybeUninit<T>], order: O) -> Self {
+    pub fn with_order(storage: &'a mut [MaybeUninit<T>], order: O) -> Self {
         Self {
             items: Vector::new(storage),
             order,
@@ -119,13 +119,13 @@ impl<'a, T, O> Heap<'a, T, O> {
 
     /// Maximum number of elements the heap can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.items.capacity()
     }
 
     /// Number of elements that can still be pushed.
     #[inline]
-    pub const fn remaining(&self) -> usize {
+    pub fn remaining(&self) -> usize {
         self.items.remaining()
     }
 
@@ -137,7 +137,7 @@ impl<'a, T, O> Heap<'a, T, O> {
 
     /// `true` when no more elements can be pushed.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.items.is_full()
     }
 
@@ -150,7 +150,7 @@ impl<'a, T, O> Heap<'a, T, O> {
     /// All elements as one contiguous slice, in heap order: the first is the
     /// next to pop, the rest are in no useful order.
     #[inline]
-    pub const fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[T] {
         self.items.as_slice()
     }
 

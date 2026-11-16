@@ -5,7 +5,7 @@ use core::mem::{self, MaybeUninit};
 use core::ops::{Bound, RangeBounds};
 use core::{fmt, slice};
 
-use crate::{Full, Vector};
+use crate::{Borrowed, Full, Vector};
 
 /// A fixed-capacity map that keeps its entries sorted by key, in memory
 /// provided by the caller.
@@ -32,13 +32,13 @@ use crate::{Full, Vector};
 /// ```
 pub struct OrderedMap<'a, K, V> {
     // Invariant: sorted by key, strictly increasing (no duplicate keys).
-    entries: Vector<'a, (K, V)>,
+    entries: Vector<(K, V), Borrowed<'a>>,
 }
 
 impl<'a, K, V> OrderedMap<'a, K, V> {
     /// Creates an empty map using `storage` as its memory.
     #[inline]
-    pub const fn new(storage: &'a mut [MaybeUninit<(K, V)>]) -> Self {
+    pub fn new(storage: &'a mut [MaybeUninit<(K, V)>]) -> Self {
         Self {
             entries: Vector::new(storage),
         }
@@ -52,13 +52,13 @@ impl<'a, K, V> OrderedMap<'a, K, V> {
 
     /// Maximum number of entries the map can hold.
     #[inline]
-    pub const fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.entries.capacity()
     }
 
     /// Number of entries that can still be inserted.
     #[inline]
-    pub const fn remaining(&self) -> usize {
+    pub fn remaining(&self) -> usize {
         self.entries.remaining()
     }
 
@@ -70,7 +70,7 @@ impl<'a, K, V> OrderedMap<'a, K, V> {
 
     /// `true` when no new key can be inserted.
     #[inline]
-    pub const fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.entries.is_full()
     }
 
@@ -106,7 +106,7 @@ impl<'a, K, V> OrderedMap<'a, K, V> {
 
     /// All entries as one contiguous slice, sorted by key.
     #[inline]
-    pub const fn as_slice(&self) -> &[(K, V)] {
+    pub fn as_slice(&self) -> &[(K, V)] {
         self.entries.as_slice()
     }
 
