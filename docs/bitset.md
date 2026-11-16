@@ -1,6 +1,6 @@
 # Bitset
 
-`Bitset<'a>` is a fixed-capacity set of bits over user-provided memory: one
+`Bitset<S>` is a fixed-capacity set of bits with a [storage parameter](storage.md#storage-parameter): one
 bit per possible member. See [storage](storage.md) and [errors](errors.md).
 
 Use it as a set of small integers: visited cells in pathfinding, entity or
@@ -26,7 +26,7 @@ clears every word, so it is O(words).
 
 | Operation | Signature | Notes |
 |---|---|---|
-| create | `new(&'a mut [MaybeUninit<u64>]) -> Bitset<'a>` | all bits clear |
+| create | `new(buffer)`, `Bitset::<Inline<N>>::inline()` (`N` in 64-bit words) | all bits clear |
 | sizes | `capacity()`, `count()`, `is_empty()`, `is_full()` | `count` is a popcount over all words |
 | test | `contains(i) -> bool` | `false` when out of range |
 | set | `insert(i) -> Result<bool, OutOfBounds>` | `true` when the bit was clear before |
@@ -43,3 +43,18 @@ clears every word, so it is O(words).
 
 - No allocation, no panics. Writing to an out-of-range index is an
   `OutOfBounds` error; reading one reports "not set".
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Bitset<Inline<{ words(1000) }>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Bitset<Borrowed<'a>>` | provided by the caller, sized in `u64` words: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.
+
+For inline storage `N` counts 64-bit words, not bits.

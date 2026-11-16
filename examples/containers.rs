@@ -32,6 +32,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     trail.points.push([0.0, 1.0])?;
     assert_eq!(trail.points.capacity(), 16);
 
+    // The same for the other containers: a struct that owns everything it
+    // needs, created in one line.
+    #[derive(Default)]
+    struct Inventory {
+        items: Pool<&'static str, Inline<32>>,
+        by_id: Map<u32, &'static str, Inline<64>>,
+        recent: Deque<u32, Inline<8>>,
+    }
+    let mut inventory = Inventory::default();
+    inventory.items.insert("potion")?;
+    inventory.by_id.insert(1, "potion")?;
+    inventory.recent.push_back(1)?;
+    assert_eq!(inventory.by_id.get(&1), Some(&"potion"));
+
     // Pool: values with stable handles that detect removal.
     let mut memory = Memory::<Slot<&str>, 64>::new();
     let mut enemies = Pool::new(&mut memory);

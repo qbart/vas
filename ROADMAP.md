@@ -102,6 +102,13 @@
 - [x] `vas::storage`: `Storage`, `Buffer`, `IntoBuffer`
 - [x] `move_into` changes the kind of storage; `path_into` and `nearest_k` accept any storage
 
+## 0.23.0 — storage parameter on single-buffer containers
+
+- [x] `Pool`, `Map`, `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree` take `S`: `Pool<T, Inline<64>>`, `Map<K, V, Borrowed<'a>>`
+- [x] `inline()` (const) and `Default` for inline storage, so a struct can own all its containers
+- [x] `Map`'s hasher parameter moved after the storage and renamed `H`
+- [x] `alloc` feature: `&mut Vec<MaybeUninit<T>>` and `&mut Box<[MaybeUninit<T>]>` accepted as borrowed storage
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -119,9 +126,11 @@
   - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
   - [x] Storage parameter on `Vector` (0.22.0): `Vector<T, S>` with
         `Borrowed<'a>` and `Inline<N>`
-  - [ ] Storage parameter on the other containers (`Pool`, `Map`, `Deque`,
-        `Heap`, `OrderedMap`, `Bitset`, trees, graphs, spatial structures),
-        so `Pool<T, Inline<64>>` works without naming `Slot`
+  - [x] Storage parameter on the single-buffer containers (0.23.0): `Pool`,
+        `Map`, `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
+  - [ ] Storage parameter on the containers with two blocks of memory:
+        `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`,
+        `PathFinder`
   - [ ] Growing storage: a third choice of `S` backed by an allocator.
         `push` then grows instead of failing.
   - [ ] `Clone` for containers with inline storage

@@ -6,9 +6,9 @@ a mapped GPU buffer, ...).
 
 ## Convention
 
-- A container borrows its storage for a lifetime `'a`:
-  `&'a mut [MaybeUninit<T>]`. `Vector` can also hold its memory inline; see
-  "Storage parameter" below.
+- A container either borrows its storage for a lifetime `'a`
+  (`&'a mut [MaybeUninit<T>]`) or holds it inline; see "Storage parameter"
+  below.
 - The capacity of a container is the length of the storage slice. It never
   changes; containers do not grow.
 - The container tracks which slots are initialised. Slots are initialised on
@@ -20,14 +20,31 @@ a mapped GPU buffer, ...).
 
 ## Storage parameter
 
-`Vector<T, S>` takes a parameter `S` that says where its memory lives. It is
-the first container converted; the plan is to convert the others the same
-way (see ROADMAP).
+Containers take a parameter `S` that says where their memory lives:
+`Vector<T, S>`, `Pool<T, S>`, `Map<K, V, S>`, `Deque<T, S>`, `Heap<T, S>`,
+`OrderedMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`, `BinaryTree<T, S>`.
+
+Containers with more than one block of memory (`Graph`, `StaticGraph`,
+`SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`) and the ones that are a
+view over your own slice (`Bvh`, `KdTree`) still borrow; see ROADMAP.
+
+With inline storage a struct can own all of its containers, with no
+lifetime and no `Slot` types to name:
+
+```rust
+#[derive(Default)]
+struct World {
+    enemies: Pool<Enemy, Inline<64>>,
+    names: Map<u32, &'static str, Inline<256>>,
+    events: Deque<Event, Inline<32>>,
+}
+let world = World::default();
+```
 
 | `S` | Memory | Built from |
 |---|---|---|
-| `Borrowed<'a>` | provided by the caller, borrowed for `'a` | `&mut [MaybeUninit<T>]`, `&mut [MaybeUninit<T>; N]`, `&mut Memory<T, N>` |
-| `Inline<N>` | `N` slots inside the container | `Memory<T, N>`, `[MaybeUninit<T>; N]`, or `Vector::inline()` |
+| `Borrowed<'a>` | provided by the caller, borrowed for `'a` | `&mut [MaybeUninit<T>]`, `&mut [MaybeUninit<T>; N]`, `&mut Memory<T, N>`; with the `alloc` feature also `&mut Vec<MaybeUninit<T>>` and `&mut Box<[MaybeUninit<T>]>` |
+| `Inline<N>` | `N` slots inside the container | `inline()`, `default()`, or `Memory<T, N>` / `[MaybeUninit<T>; N]` passed by value |
 
 The kind follows from what is passed to `new`: a reference borrows, a value
 is stored inline. In type position write `Vector<f32, Borrowed<'a>>` or
@@ -40,6 +57,14 @@ The pieces live in `vas::storage`:
 - `Buffer<T>`: the slots themselves. An `unsafe` trait; containers rely on
   it returning the same slots every time.
 - `IntoBuffer<T>`: what `new` accepts.
+
+Costs of the parameter:
+
+- `new`, `capacity`, `is_full` and similar are not `const` (they go through
+  the storage trait). `inline()`, `len` and `is_empty` are.
+- Inline containers are copied whole when moved, used or not. Keep large
+  ones in borrowed storage.
+- Inline `Map` and `Bitset` initialise all their slots on creation.
 
 `Borrowed<'a>` keeps the slice as a pointer and a length, so generic code
 over `Vector<T, Borrowed<'a>>` needs no `T: 'a` bound.

@@ -1,7 +1,7 @@
 # Map
 
-`Map<'a, K, V, S = FastState>` is a fixed-capacity unordered map (hash table)
-over user-provided memory. See [storage](storage.md) and [errors](errors.md).
+`Map<K, V, S, H = FastState>` is a fixed-capacity unordered map (hash table)
+with a [storage parameter](storage.md#storage-parameter). See [storage](storage.md) and [errors](errors.md).
 
 ## Design
 
@@ -55,7 +55,7 @@ let mut map = Map::with_hasher(&mut memory, my_build_hasher);
 
 | Operation | Signature | Notes |
 |---|---|---|
-| create | `new(storage)`, `with_hasher(storage, S)` | O(capacity) |
+| create | `new(buffer)`, `with_hasher(buffer, H)`, `inline()`, `inline_with_hasher(H)` | O(capacity) |
 | sizes | `len`, `capacity`, `is_empty`, `is_full` | O(1) |
 | insert | `insert(K, V) -> Result<Option<V>, Full<(K, V)>>` | `Some(old)` when the key existed; returns both when full |
 | lookup | `get(&Q)`, `get_mut(&Q)`, `contains_key(&Q)` | `K: Borrow<Q>`, so `&str` works for `String` keys |
@@ -68,3 +68,19 @@ let mut map = Map::with_hasher(&mut memory, my_build_hasher);
 - No allocation, no panics.
 - A failed insert leaves the map unchanged and returns the key and value.
 - Entries still in the map are dropped when it is dropped.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Map<K, V, Inline<256>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Map<K, V, Borrowed<'a>>` | provided by the caller, sized in `Slot<K, V>`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.
+
+The hasher parameter is now called `H` and comes after the storage:
+`Map<K, V, Borrowed<'a>, MyHasher>`.

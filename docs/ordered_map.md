@@ -1,7 +1,7 @@
 # Ordered map
 
-`OrderedMap<'a, K, V>` is a fixed-capacity map that keeps its entries sorted
-by key, over user-provided memory. See [storage](storage.md) and
+`OrderedMap<K, V, S>` is a fixed-capacity map that keeps its entries sorted
+by key, with a [storage parameter](storage.md#storage-parameter). See [storage](storage.md) and
 [errors](errors.md).
 
 Use it when order matters: keyframes, timed events, sorted lookup tables,
@@ -52,3 +52,16 @@ let mut keyframes = OrderedMap::new(&mut memory);
 - No allocation, no panics, no `unsafe` of its own.
 - A failed insert leaves the map unchanged and returns the key and value.
 - Keys cannot be modified in place, so the order cannot be broken.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `OrderedMap<K, V, Inline<64>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `OrderedMap<K, V, Borrowed<'a>>` | provided by the caller, sized in `(K, V)`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.

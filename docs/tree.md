@@ -1,6 +1,6 @@
 # Tree
 
-`Tree<'a, T>` is a fixed-capacity hierarchy over user-provided memory: every
+`Tree<T, S>` is a fixed-capacity hierarchy with a [storage parameter](storage.md#storage-parameter): every
 node has an optional parent and an ordered list of children. See
 [storage](storage.md) and [errors](errors.md).
 
@@ -53,3 +53,16 @@ stale id are empty.
 - A node can never become its own ancestor: `set_parent` rejects it with
   `MoveError::Cycle`.
 - Values still in the tree are dropped when it is dropped.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Tree<T, Inline<64>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Tree<T, Borrowed<'a>>` | provided by the caller, sized in `Slot<T>`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.

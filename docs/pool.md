@@ -1,7 +1,7 @@
 # Pool
 
-`Pool<'a, T>` is a fixed-capacity store of values addressed by generational
-handles, over user-provided memory. See [storage](storage.md) and
+`Pool<T, S>` is a fixed-capacity store of values addressed by generational
+handles, with a [storage parameter](storage.md#storage-parameter). See [storage](storage.md) and
 [errors](errors.md).
 
 Use it for things that are created and destroyed at run time and referred to
@@ -37,7 +37,7 @@ Creating a pool is O(1); slots are set up lazily on first use. At most
 
 | Operation | Signature | Notes |
 |---|---|---|
-| create | `new(&'a mut [MaybeUninit<Slot<T>>]) -> Pool<'a, T>` | O(1) |
+| create | `new(buffer)`, `Pool::<T, Inline<N>>::inline()` | O(1) |
 | sizes | `len`, `capacity`, `is_empty`, `is_full` | O(1) |
 | insert | `insert(T) -> Result<Handle<T>, Full<T>>` | O(1); returns the value when full |
 | remove | `remove(Handle<T>) -> Option<T>` | O(1); `None` for a stale handle |
@@ -54,3 +54,16 @@ Creating a pool is O(1); slots are set up lazily on first use. At most
 - A slot is retired after 2^31 reuses rather than letting its generation wrap
   around, so a stale handle can never match a newer value. Each retirement
   reduces the usable capacity by one.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Pool<T, Inline<64>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Pool<T, Borrowed<'a>>` | provided by the caller, sized in `Slot<T>`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.

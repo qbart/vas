@@ -1,7 +1,6 @@
 # Binary tree
 
-`BinaryTree<'a, T>` is a fixed-capacity binary tree over user-provided
-memory: one root, and every node has at most a left and a right child. See
+`BinaryTree<T, S>` is a fixed-capacity binary tree with a [storage parameter](storage.md#storage-parameter): one root, and every node has at most a left and a right child. See
 [storage](storage.md) and [errors](errors.md).
 
 It is the plain structure: the caller decides where each node goes, and
@@ -50,3 +49,16 @@ links. A walk started from a stale id is empty.
 
 - No allocation, no panics, no `unsafe` of its own.
 - Values still in the tree are dropped when it is dropped.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `BinaryTree<T, Inline<64>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `BinaryTree<T, Borrowed<'a>>` | provided by the caller, sized in `Slot<T>`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.

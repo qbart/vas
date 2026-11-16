@@ -24,9 +24,11 @@ Memory:
 - `Arena`: one big block shared by many containers and values
 - `Arena::from_heap(bytes)`, `HeapBlock`: that block from the heap (`alloc` feature, off by default)
 
-Containers so far:
+Containers so far. Most take a storage parameter (see `docs/storage.md`): `Pool<T, Inline<64>>` holds
+its own memory and is a plain struct field, `Pool<T, Borrowed<'a>>` uses
+memory you provide (a `Memory` block or an `Arena` piece).
 
-- `Vector`: fixed-capacity contiguous vector, on borrowed memory (`Vector<T, Borrowed<'a>>`) or holding its own (`Vector<T, Inline<N>>`)
+- `Vector`: fixed-capacity contiguous vector
 - `Pool`: fixed-capacity store with generational handles
 - `Map`: fixed-capacity unordered map
 - `OrderedMap`: fixed-capacity map sorted by key

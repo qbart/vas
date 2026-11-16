@@ -1,7 +1,6 @@
 # Heap
 
-`Heap<'a, T, O = Max>` is a fixed-capacity binary heap (priority queue) over
-user-provided memory. See [storage](storage.md) and [errors](errors.md).
+`Heap<T, S, O = Max>` is a fixed-capacity binary heap (priority queue) with a [storage parameter](storage.md#storage-parameter). See [storage](storage.md) and [errors](errors.md).
 
 Use it wherever "the most urgent item next" is needed: the open set of a
 pathfinder, timers, scheduled events.
@@ -51,3 +50,19 @@ end, which halves the memory writes compared with swapping. This uses
 
 - No allocation, no panics.
 - Elements still in the heap are dropped when it is dropped.
+
+## Storage
+
+The parameter `S` says where the memory lives; see
+[storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Heap<T, Inline<64>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Heap<T, Borrowed<'a>>` | provided by the caller, sized in `T`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
+
+Passing a `Memory` to `new` by value also gives inline storage. Functions
+that should accept either kind are generic over `S`.
+
+`inline()` pops the largest first. For another order use
+`Heap::<T, Inline<N>, Min>::inline_with(Min)` or `default()`.

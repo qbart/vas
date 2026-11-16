@@ -76,8 +76,6 @@ vector is handed back unchanged.
 - `new` takes the exact types listed in [storage](storage.md). Something
   that only derefs to a slice, such as `&mut Vec<MaybeUninit<T>>`, must be
   passed as `&mut vec[..]`.
-- `Vector` is the first container with a storage parameter. The others
-  still borrow their memory.
 
 ## Paths
 
