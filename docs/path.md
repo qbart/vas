@@ -46,7 +46,7 @@ clear the node memory.
 | create | `PathFinder::new(nodes, open)` | O(nodes) |
 | search | `find(&space, start, goal) -> Result<f32, PathError>` | returns the path cost |
 | path, backwards | `path_rev()` | iterator from goal to start; no extra memory |
-| path, forwards | `path_into(&mut Vector<u32>) -> Result<usize, Full<()>>` | appends start to goal; unchanged when it does not fit |
+| path, forwards | `path_into(&mut Vector<u32, S>) -> Result<usize, Full<()>>` | appends start to goal; unchanged when it does not fit; any storage |
 | cost | `cost(node) -> Option<f32>` | cheapest known cost of a node reached by the last search |
 
 `PathError` is `NoPath`, `Full` (open list out of room) or `OutOfBounds`

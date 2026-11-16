@@ -26,7 +26,7 @@ Memory:
 
 Containers so far:
 
-- `Vector`: fixed-capacity contiguous vector
+- `Vector`: fixed-capacity contiguous vector, on borrowed memory (`Vector<T, Borrowed<'a>>`) or holding its own (`Vector<T, Inline<N>>`)
 - `Pool`: fixed-capacity store with generational handles
 - `Map`: fixed-capacity unordered map
 - `OrderedMap`: fixed-capacity map sorted by key

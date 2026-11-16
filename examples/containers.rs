@@ -4,7 +4,7 @@ use std::error::Error;
 
 use vas::bitset::words;
 use vas::pool::Slot;
-use vas::{Bitset, Deque, Heap, Map, Memory, OrderedMap, Pool, Rng, Vector};
+use vas::{Bitset, Deque, Heap, Inline, Map, Memory, OrderedMap, Pool, Rng, Vector};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Vector: a contiguous block, e.g. vertices to hand to a renderer.
@@ -20,6 +20,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .move_into(&mut bigger)
         .map_err(|_| "block too small")?;
     assert_eq!(vertices.capacity(), 4096);
+
+    // Inline: the vector holds its own memory, so it is a plain struct
+    // field with no lifetime.
+    struct Trail {
+        points: Vector<[f32; 2], Inline<16>>,
+    }
+    let mut trail = Trail {
+        points: Vector::inline(),
+    };
+    trail.points.push([0.0, 1.0])?;
+    assert_eq!(trail.points.capacity(), 16);
 
     // Pool: values with stable handles that detect removal.
     let mut memory = Memory::<Slot<&str>, 64>::new();

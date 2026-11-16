@@ -7,7 +7,8 @@ a mapped GPU buffer, ...).
 ## Convention
 
 - A container borrows its storage for a lifetime `'a`:
-  `&'a mut [MaybeUninit<T>]`.
+  `&'a mut [MaybeUninit<T>]`. `Vector` can also hold its memory inline; see
+  "Storage parameter" below.
 - The capacity of a container is the length of the storage slice. It never
   changes; containers do not grow.
 - The container tracks which slots are initialised. Slots are initialised on
@@ -16,6 +17,32 @@ a mapped GPU buffer, ...).
   uninitialised state and can be reused.
 - Contiguous containers expose their contents as `&[T]` / `&mut [T]` so the
   block can be passed on as-is (for example to a renderer).
+
+## Storage parameter
+
+`Vector<T, S>` takes a parameter `S` that says where its memory lives. It is
+the first container converted; the plan is to convert the others the same
+way (see ROADMAP).
+
+| `S` | Memory | Built from |
+|---|---|---|
+| `Borrowed<'a>` | provided by the caller, borrowed for `'a` | `&mut [MaybeUninit<T>]`, `&mut [MaybeUninit<T>; N]`, `&mut Memory<T, N>` |
+| `Inline<N>` | `N` slots inside the container | `Memory<T, N>`, `[MaybeUninit<T>; N]`, or `Vector::inline()` |
+
+The kind follows from what is passed to `new`: a reference borrows, a value
+is stored inline. In type position write `Vector<f32, Borrowed<'a>>` or
+`Vector<f32, Inline<1024>>`.
+
+The pieces live in `vas::storage`:
+
+- `Storage<T>`: implemented by `Borrowed` and `Inline`. Use it as a bound
+  (`S: Storage<T>`) to accept a container over any storage.
+- `Buffer<T>`: the slots themselves. An `unsafe` trait; containers rely on
+  it returning the same slots every time.
+- `IntoBuffer<T>`: what `new` accepts.
+
+`Borrowed<'a>` keeps the slice as a pointer and a length, so generic code
+over `Vector<T, Borrowed<'a>>` needs no `T: 'a` bound.
 
 ## Unsafe
 

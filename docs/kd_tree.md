@@ -32,7 +32,7 @@ let tree = KdTree::build(&mut items); // items: &mut [([f32; 2], T)]
 | sizes | `len`, `is_empty` | |
 | items | `items()`, `get(index)`, `get_mut(index)` | `get_mut` gives the value only; positions are fixed |
 | nearest | `nearest(&target) -> Option<Neighbor>` | `None` when empty |
-| k nearest | `nearest_k(&target, &mut Vector<Neighbor>)` | fills `out` nearest first; its capacity is k |
+| k nearest | `nearest_k(&target, &mut Vector<Neighbor, S>)` | fills `out` nearest first; its capacity is k; any storage |
 | box query | `query(&Aabb<D>, \|position, value\| ..)` | exact; boundary included |
 | radius query | `query_radius(&center, radius, \|position, value\| ..)` | exact; boundary included |
 

@@ -96,6 +96,12 @@
 
 - [x] `KB(n)`, `MB(n)`, `GB(n)` replace the constants: `Arena::from_heap(MB(20))`
 
+## 0.22.0 — storage parameter on vector
+
+- [x] `Vector<T, S>`: `Borrowed<'a>` (caller's memory) or `Inline<N>` (own memory, no lifetime)
+- [x] `vas::storage`: `Storage`, `Buffer`, `IntoBuffer`
+- [x] `move_into` changes the kind of storage; `path_into` and `nearest_k` accept any storage
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -111,19 +117,12 @@
 - [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
   - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
-  - [ ] Storage parameter (preferred direction): a single `Vector<T, S>` where
-        `S` says who holds the memory. Game data is structs of arrays and
-        structs of structs, and "who owns the memory" should be a choice per
-        field, not a different type each time. Choices of `S`:
-    - a borrowed block (today's behaviour)
-    - an inline array, so the container carries its own block and embeds
-      directly in a struct with no arena and no lifetime
-    - an allocator, so the container grows
-    - Cost: the extra parameter appears in every signature, and `push`
-      means two different things (fail when full, or grow).
-    - Alternative considered: keep the fixed types as they are and add
-      separate growable types. Simpler fixed case, but more type names and
-      no inline-owned storage.
-  - [ ] Naming is undecided (only matters if separate types are chosen): `DynVector` / `DynMap`,
-        `GrowVector` / `GrowMap`, or the same names in their own module
-        (`vas::grow::Vector`)
+  - [x] Storage parameter on `Vector` (0.22.0): `Vector<T, S>` with
+        `Borrowed<'a>` and `Inline<N>`
+  - [ ] Storage parameter on the other containers (`Pool`, `Map`, `Deque`,
+        `Heap`, `OrderedMap`, `Bitset`, trees, graphs, spatial structures),
+        so `Pool<T, Inline<64>>` works without naming `Slot`
+  - [ ] Growing storage: a third choice of `S` backed by an allocator.
+        `push` then grows instead of failing.
+  - [ ] `Clone` for containers with inline storage
+  - [ ] Name of the growing storage is undecided (`Growing<A>`, `Heap<A>`, `Dynamic<A>`, ...)
