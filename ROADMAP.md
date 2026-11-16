@@ -92,6 +92,10 @@
 
 - [x] `KB`, `MB`, `GB` constants: `Arena::from_heap(20 * MB)`
 
+## 0.21.0 — size units as functions
+
+- [x] `KB(n)`, `MB(n)`, `GB(n)` replace the constants: `Arena::from_heap(MB(20))`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

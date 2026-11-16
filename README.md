@@ -20,7 +20,7 @@ assert_eq!(v.as_slice(), &[1.0, 2.0, 3.0]); // one contiguous block
 Memory:
 
 - `Memory`: an inline block for one container
-- `KB`, `MB`, `GB`: units for sizes, as in `Arena::from_heap(20 * MB)`
+- `KB`, `MB`, `GB`: units for sizes, as in `Arena::from_heap(MB(20))`
 - `Arena`: one big block shared by many containers and values
 - `Arena::from_heap(bytes)`, `HeapBlock`: that block from the heap (`alloc` feature, off by default)
 

@@ -38,10 +38,11 @@ allocator straight to the container.
 
 ## Sizes in bytes
 
-Byte sizes are plain `usize`. The constants `vas::KB`, `vas::MB` and `vas::GB`
-(powers of 1024) make them readable: `20 * MB`. Being constants, they work in
-const generics too, e.g. `StaticBlock<{ 20 * MB }>` or
-`Memory::<u8, { 4 * KB }>`. `MB` and `GB` do not exist on 16-bit targets.
+Byte sizes are plain `usize`. The functions `vas::KB`, `vas::MB` and `vas::GB`
+(powers of 1024) make them readable: `MB(20)`. They are `const`, so they work
+in const generics too, e.g. `StaticBlock<{ MB(20) }>` or
+`Memory::<u8, { KB(4) }>`. A size too large for a `usize` saturates to
+`usize::MAX` instead of wrapping or panicking, so it is reported as `Full`. `MB` and `GB` do not exist on 16-bit targets.
 
 ## Arena
 
