@@ -12,6 +12,10 @@ categories = ["no-std", "game-development", "data-structures", "algorithms"]
 
 [dependencies]
 
+[[bench]]
+name = "bench"
+harness = false
+
 [lints.rust]
 unsafe_code = "deny"
 
