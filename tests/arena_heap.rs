@@ -1,11 +1,11 @@
 #![cfg(feature = "alloc")]
 
 use vas::arena::HeapBlock;
-use vas::{Arena, Full, Vector};
+use vas::{Arena, Borrowed, Full, Vector};
 
 struct Particles {
-    x: Vector<'static, f32>,
-    y: Vector<'static, f32>,
+    x: Vector<f32, Borrowed<'static>>,
+    y: Vector<f32, Borrowed<'static>>,
 }
 
 #[test]

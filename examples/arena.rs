@@ -5,16 +5,16 @@ use std::error::Error;
 
 use vas::arena::StaticBlock;
 use vas::pool::Slot;
-use vas::{Arena, Full, MB, Map, Pool, Vector};
+use vas::{Arena, Borrowed, Full, MB, Map, Pool, Vector};
 
 /// 20 MB for everything, living as long as the program.
 static GAME_MEMORY: StaticBlock<{ MB(20) }> = StaticBlock::new();
 
 /// A struct of arrays. The block is `'static`, so no lifetime parameter.
 struct Particles {
-    x: Vector<'static, f32>,
-    y: Vector<'static, f32>,
-    life: Vector<'static, u16>,
+    x: Vector<f32, Borrowed<'static>>,
+    y: Vector<f32, Borrowed<'static>>,
+    life: Vector<u16, Borrowed<'static>>,
 }
 
 impl Particles {

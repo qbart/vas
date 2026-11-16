@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 use vas::arena::StaticBlock;
 use vas::pool::Slot;
-use vas::{Arena, Full, Map, Memory, Pool, Vector};
+use vas::{Arena, Borrowed, Full, Map, Memory, Pool, Vector};
 
 #[test]
 fn hands_out_separate_pieces() {
@@ -135,9 +135,9 @@ fn sub_arenas_give_each_system_a_budget() {
 
 /// A struct of arrays: every field is a container, all packed in one block.
 struct Particles<'a> {
-    x: Vector<'a, f32>,
-    y: Vector<'a, f32>,
-    life: Vector<'a, u16>,
+    x: Vector<f32, Borrowed<'a>>,
+    y: Vector<f32, Borrowed<'a>>,
+    life: Vector<u16, Borrowed<'a>>,
 }
 
 impl<'a> Particles<'a> {
@@ -207,7 +207,7 @@ static BLOCK: StaticBlock<1024> = StaticBlock::new();
 /// With a block that lives for the whole program, containers are `'static`
 /// and need no lifetime parameter on the structs that hold them.
 struct World {
-    positions: Vector<'static, [f32; 2]>,
+    positions: Vector<[f32; 2], Borrowed<'static>>,
     score: &'static mut u32,
 }
 
