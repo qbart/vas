@@ -82,6 +82,7 @@
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
+- [x] Benchmarks against other crates (`make bench-crates`, unpublished `bench/` crate)
 - [x] Usage examples, compiled and run by `make check` (`examples/`)
 - [x] CI: `make check` and Miri on every push (`.github/workflows/ci.yml`)
 
@@ -89,9 +90,19 @@
 
 - [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
 - [ ] Red-black tree
+- [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
   - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
-  - [ ] Growable vector and map as **separate types** built on the fixed ones;
-        the fixed types stay unchanged (decided)
-  - [ ] Naming is undecided: `DynVector` / `DynMap`, `GrowVector` / `GrowMap`,
-        or the same names in their own module (`vas::grow::Vector`)
+  - [ ] Open design question: how containers use the allocator
+    - **Separate types** (current preference): today's fixed types stay
+      exactly as they are, and a growable vector and map are added as new
+      types built on them. Simple fixed case, no extra type parameter; the
+      cost is more type names.
+    - **One type with a storage parameter**: a single `Vector<T, S>` where
+      `S` is either a borrowed block (fixed, as today) or an allocator
+      (grows). One type to learn and code works for both; the cost is that
+      the extra parameter appears in every signature, and `push` means two
+      different things (fail when full, or grow).
+  - [ ] Naming is undecided (if separate types): `DynVector` / `DynMap`,
+        `GrowVector` / `GrowMap`, or the same names in their own module
+        (`vas::grow::Vector`)

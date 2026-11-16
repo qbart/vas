@@ -1,4 +1,4 @@
-.PHONY: build release test lint fmt examples check miri bench publish clean
+.PHONY: build release test lint fmt examples check miri bench bench-crates publish clean
 
 build:
 	cargo build
@@ -26,6 +26,9 @@ miri:
 
 bench:
 	cargo bench
+
+bench-crates:
+	cd bench && cargo run --release
 
 publish: check
 	cargo publish

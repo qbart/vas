@@ -1,5 +1,10 @@
 # Benchmarks
 
+There are two sets: against the standard library (this section onwards) and
+[against other crates](#against-other-crates).
+
+## Against the standard library
+
 Run with `make bench`. vas has no dependencies, so there is no benchmarking
 crate: `benches/bench.rs` is a small harness that runs each case 15 times
 and reports the fastest run, in nanoseconds per operation.
@@ -10,7 +15,7 @@ Treat the numbers as a rough guide, not a precise measurement:
 - no statistics; repeated runs differ by 10-30% on some cases;
 - synthetic workloads with random `u32` keys or uniformly spread points.
 
-## Summary
+### Summary
 
 | Structure | Against | Result |
 |---|---|---|
@@ -28,7 +33,7 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Quadtree` radius query | brute force | about 13x faster |
 | `KdTree` nearest | brute force | about 19x faster |
 
-## What the numbers say
+### What the numbers say
 
 **Map.** The hasher is not the weak point: `std`'s `HashMap` gets about
 twice as fast when given `FastHasher` instead of its default. The table
@@ -64,7 +69,7 @@ their best.
 **Path search.** On a 128x128 grid with 20% walls, corner to corner, A* with
 a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 
-## Results
+### Results
 
 | Case | Implementation | ns / op |
 |---|---|---:|
@@ -131,3 +136,98 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | 10k points: build | vas::Quadtree | 17.6 |
 | 128x128 grid, corner to corner | vas::PathFinder A* | 34966.0 |
 | 128x128 grid, corner to corner | vas::PathFinder Dijkstra | 549943.0 |
+
+## Against other crates
+
+Run with `make bench-crates`. The comparison lives in `bench/`, a separate
+crate that is never published and is not part of the `vas` package, so vas
+itself keeps zero dependencies. Same harness, same machine, same caveats.
+
+Every case computes a checksum, and vas and the other crate agree on it in
+every case that is comparable (the two random generators use different
+algorithms, so theirs differ).
+
+### Summary
+
+| Structure | Against | Result |
+|---|---|---|
+| `Vector` | `arrayvec`, `heapless` | same speed |
+| `Deque` | `heapless::Deque` | about 1.6x slower |
+| `Heap` | `heapless::BinaryHeap` | level to slightly slower (within run-to-run noise) |
+| `Map`, 2k keys | `hashbrown` | faster inserts, lookups level |
+| `Map`, 50k keys | `hashbrown` | inserts level, lookups about 2x slower |
+| `Map` | `heapless::FnvIndexMap` | 1.5x to 2x faster at 2k keys, 2x to 5x faster at 50k |
+| `Pool` | `slotmap`, `slab` | level with `slab`, slightly faster than `slotmap` |
+| `Bitset` | `fixedbitset` | same speed |
+| `Rng` | `fastrand` | slightly slower (0.5 vs 0.4 ns per `u64`; 0.9 vs 0.6 ns for a bounded value) |
+| `KdTree` nearest | `rstar::RTree` | about 3x faster, and 2.5x faster to build |
+| `SpatialGrid` radius query | `rstar::RTree` | about 4.5x faster |
+| `PathFinder` | `pathfinding::astar` | about 1.2x faster |
+
+Notes:
+
+- The map here has 131072 slots for 50k keys (38% full), where the std
+  comparison above uses 100k slots (50% full); that is why its numbers are
+  better in this table.
+- `heapless::Deque` is the one clear loss. The likely cause is that vas
+  checks bounds on every slot access where `heapless` does not; this has not
+  been confirmed by profiling.
+- `rstar` is a general R-tree that also handles shapes with a size; a k-d
+  tree and a grid are specialised for points, so beating it on point queries
+  is expected.
+- `pathfinding::astar` allocates its own bookkeeping on every call;
+  `PathFinder` reuses the caller's memory.
+
+### Results
+
+| Case | Implementation | ns / op |
+|---|---|---:|
+| push 100k u64 | vas::Vector | 0.8 |
+| push 100k u64 | arrayvec::ArrayVec | 0.8 |
+| push 100k u64 | heapless::Vec | 0.8 |
+| queue 100k push+pop | vas::Deque | 2.2 |
+| queue 100k push+pop | heapless::Deque | 1.4 |
+| heap 50k push then pop | vas::Heap | 20.4 |
+| heap 50k push then pop | heapless::BinaryHeap | 17.0 |
+| map 2000 keys: insert | vas::Map | 1.7 |
+| map 2000 keys: hits | vas::Map | 1.4 |
+| map 2000 keys: misses | vas::Map | 1.4 |
+| map 2000 keys: insert | hashbrown::HashMap (default hasher) | 2.7 |
+| map 2000 keys: hits | hashbrown::HashMap (default hasher) | 1.5 |
+| map 2000 keys: misses | hashbrown::HashMap (default hasher) | 1.4 |
+| map 2000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.6 |
+| map 2000 keys: hits | hashbrown::HashMap + vas FastHasher | 1.5 |
+| map 2000 keys: misses | hashbrown::HashMap + vas FastHasher | 1.1 |
+| map 2000 keys: insert | heapless::FnvIndexMap | 2.9 |
+| map 2000 keys: hits | heapless::FnvIndexMap | 2.8 |
+| map 2000 keys: misses | heapless::FnvIndexMap | 2.1 |
+| map 50000 keys: insert | vas::Map | 3.3 |
+| map 50000 keys: hits | vas::Map | 3.2 |
+| map 50000 keys: misses | vas::Map | 7.3 |
+| map 50000 keys: insert | hashbrown::HashMap (default hasher) | 3.0 |
+| map 50000 keys: hits | hashbrown::HashMap (default hasher) | 1.7 |
+| map 50000 keys: misses | hashbrown::HashMap (default hasher) | 3.1 |
+| map 50000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.6 |
+| map 50000 keys: hits | hashbrown::HashMap + vas FastHasher | 1.7 |
+| map 50000 keys: misses | hashbrown::HashMap + vas FastHasher | 3.1 |
+| map 50000 keys: insert | heapless::FnvIndexMap | 11.6 |
+| map 50000 keys: hits | heapless::FnvIndexMap | 15.3 |
+| map 50000 keys: misses | heapless::FnvIndexMap | 16.2 |
+| pool 50k insert+get+remove | vas::Pool | 0.5 |
+| pool 50k insert+get+remove | slotmap::SlotMap | 0.7 |
+| pool 50k insert+get+remove | slab::Slab (no stale detection) | 0.5 |
+| bitset 100k insert+test | vas::Bitset | 0.4 |
+| bitset 100k insert+test | fixedbitset::FixedBitSet | 0.4 |
+| rng 1M u64 | vas::Rng | 0.5 |
+| rng 1M u64 | fastrand::Rng | 0.4 |
+| rng 1M in 0..6 | vas::Rng | 0.9 |
+| rng 1M in 0..6 | fastrand::Rng | 0.6 |
+| 10k points: build | vas::KdTree | 38.4 |
+| 10k points: build | rstar::RTree (bulk load) | 96.0 |
+| 10k points: 1k radius queries | vas::SpatialGrid 32x32 | 63.3 |
+| 10k points: 1k radius queries | vas::KdTree | 170.5 |
+| 10k points: 1k radius queries | rstar::RTree | 296.4 |
+| 10k points: 1k nearest | vas::KdTree | 130.3 |
+| 10k points: 1k nearest | rstar::RTree | 442.2 |
+| A* 128x128 grid, corner to corner | vas::PathFinder | 34996.0 |
+| A* 128x128 grid, corner to corner | pathfinding::astar | 41999.0 |

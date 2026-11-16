@@ -15,6 +15,6 @@ vas is a collection of data containers, structures and algorithms for game devel
 
 8. Maintain Makefile with .PHONY rules for common operations like build, release, publish
 9. Every milestone should have its own tag bump 0.x.0
-10. No dependencies should be used.
+10. No dependencies should be used. The only exception is `bench/`: a separate, never-published crate that compares vas against other crates. vas itself must stay dependency free.
 11. The crate must be `no_std` — this is the main goal.
 12. Allocation must be controlled by the library user — the library never allocates on its own.

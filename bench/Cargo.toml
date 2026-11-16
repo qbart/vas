@@ -1,0 +1,24 @@
+# Benchmarks of vas against other crates.
+#
+# This crate is never published and is not part of the `vas` package, so vas
+# itself stays free of dependencies. Run with `make bench-crates`.
+[package]
+name = "vas-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Standalone: not a member of any workspace.
+[workspace]
+
+[dependencies]
+arrayvec = "0.7.8"
+fastrand = "2.5.0"
+fixedbitset = "0.5.9"
+hashbrown = "0.17.1"
+heapless = "0.9.3"
+pathfinding = "4.16.0"
+rstar = "0.14.0"
+slab = "0.4.12"
+slotmap = "1.1.1"
+vas = { path = ".." }
