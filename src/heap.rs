@@ -1,8 +1,11 @@
 //! Fixed-capacity binary heap (priority queue) over user-provided memory.
 
+#![allow(unsafe_code)]
+
 use core::cmp::Ordering;
 use core::fmt;
-use core::mem::{self, MaybeUninit};
+use core::mem::{ManuallyDrop, MaybeUninit};
+use core::ptr;
 
 use crate::{Full, Vector};
 
@@ -163,7 +166,9 @@ impl<T, O: Order<T>> Heap<'_, T, O> {
     #[inline]
     pub fn push(&mut self, value: T) -> Result<(), Full<T>> {
         self.items.push(value)?;
-        self.sift_up(self.items.len() - 1);
+        let last = self.items.len() - 1;
+        // SAFETY: `last` is the index of the element just pushed.
+        unsafe { sift_up(self.items.as_mut_slice(), &self.order, 0, last) };
         Ok(())
     }
 
@@ -172,51 +177,136 @@ impl<T, O: Order<T>> Heap<'_, T, O> {
     pub fn pop(&mut self) -> Option<T> {
         // Takes the root out and puts the last element in its place.
         let top = self.items.swap_remove(0)?;
-        self.sift_down(0);
+        if !self.items.is_empty() {
+            // SAFETY: the heap is not empty, so index 0 is in bounds.
+            unsafe { sift_down_to_bottom(self.items.as_mut_slice(), &self.order, 0) };
+        }
         Some(top)
     }
+}
 
-    /// Moves the element at `index` up until its parent is not smaller.
-    fn sift_up(&mut self, mut index: usize) {
-        while index > 0 {
-            let parent = (index - 1) / 2;
-            let Ok([child, above]) = self.items.get_disjoint_mut([index, parent]) else {
-                return;
-            };
-            if self.order.cmp(child, above) != Ordering::Greater {
-                return;
-            }
-            mem::swap(child, above);
-            index = parent;
+/// A gap in a slice whose element has been taken out. The element is put
+/// back, at the gap's current position, when the hole is dropped, so the
+/// slice is whole again even if a comparison panics.
+struct Hole<'h, T> {
+    data: &'h mut [T],
+    element: ManuallyDrop<T>,
+    position: usize,
+}
+
+impl<'h, T> Hole<'h, T> {
+    /// # Safety
+    /// `position` must be in bounds of `data`.
+    #[inline]
+    unsafe fn new(data: &'h mut [T], position: usize) -> Self {
+        // SAFETY: the caller guarantees `position` is in bounds. The slot is
+        // treated as empty until `drop` writes the element back.
+        let element = unsafe { ptr::read(data.get_unchecked(position)) };
+        Self {
+            data,
+            element: ManuallyDrop::new(element),
+            position,
         }
     }
 
-    /// Moves the element at `index` down until no child is greater.
-    fn sift_down(&mut self, mut index: usize) {
-        loop {
-            let Some(left) = index.checked_mul(2).and_then(|i| i.checked_add(1)) else {
-                return;
-            };
-            let Some(left_item) = self.items.get(left) else {
-                return;
-            };
-            // Pick the greater of the two children.
-            let child = match self.items.get(left + 1) {
-                Some(right_item) if self.order.cmp(right_item, left_item) == Ordering::Greater => {
-                    left + 1
-                }
-                _ => left,
-            };
-            let Ok([above, below]) = self.items.get_disjoint_mut([index, child]) else {
-                return;
-            };
-            if self.order.cmp(below, above) != Ordering::Greater {
-                return;
-            }
-            mem::swap(above, below);
-            index = child;
+    #[inline]
+    fn element(&self) -> &T {
+        &self.element
+    }
+
+    /// # Safety
+    /// `index` must be in bounds of the slice and not the hole's position.
+    #[inline]
+    unsafe fn get(&self, index: usize) -> &T {
+        // SAFETY: guaranteed by the caller.
+        unsafe { self.data.get_unchecked(index) }
+    }
+
+    /// Moves the element at `index` into the hole; the hole is then at
+    /// `index`.
+    ///
+    /// # Safety
+    /// `index` must be in bounds of the slice and not the hole's position.
+    #[inline]
+    unsafe fn move_to(&mut self, index: usize) {
+        // SAFETY: both positions are in bounds and distinct, so the copy
+        // does not overlap. The source slot becomes the new hole.
+        unsafe {
+            let base = self.data.as_mut_ptr();
+            ptr::copy_nonoverlapping(base.add(index), base.add(self.position), 1);
+        }
+        self.position = index;
+    }
+}
+
+impl<T> Drop for Hole<'_, T> {
+    #[inline]
+    fn drop(&mut self) {
+        // SAFETY: `position` is in bounds and is the one slot that currently
+        // holds no element; the taken element is written back exactly once.
+        unsafe {
+            let slot = self.data.get_unchecked_mut(self.position);
+            ptr::copy_nonoverlapping(&*self.element, slot, 1);
         }
     }
+}
+
+/// Moves the element at `position` up until its parent is not smaller, but
+/// not above `start`.
+///
+/// # Safety
+/// `position` must be in bounds of `data`.
+#[inline]
+unsafe fn sift_up<T, O: Order<T>>(data: &mut [T], order: &O, start: usize, position: usize) {
+    // SAFETY: the caller guarantees `position` is in bounds.
+    let mut hole = unsafe { Hole::new(data, position) };
+    while hole.position > start {
+        let parent = (hole.position - 1) / 2;
+        // SAFETY: `parent < hole.position`, so it is in bounds and is not
+        // the hole.
+        if order.cmp(hole.element(), unsafe { hole.get(parent) }) != Ordering::Greater {
+            break;
+        }
+        // SAFETY: as above.
+        unsafe { hole.move_to(parent) };
+    }
+}
+
+/// Moves the element at `position` all the way down to a leaf, following the
+/// greater child each time, then back up to where it belongs. For an element
+/// that came from the bottom of the heap this needs fewer comparisons than
+/// stopping on the way down.
+///
+/// # Safety
+/// `position` must be in bounds of `data`.
+#[inline]
+unsafe fn sift_down_to_bottom<T, O: Order<T>>(data: &mut [T], order: &O, position: usize) {
+    let end = data.len();
+    // SAFETY: the caller guarantees `position` is in bounds.
+    let mut hole = unsafe { Hole::new(data, position) };
+    let mut child = hole.position.saturating_mul(2).saturating_add(1);
+    // While there are two children, move the greater one up.
+    while child <= end.saturating_sub(2) {
+        // SAFETY: `child` and `child + 1` are below `end` and greater than
+        // the hole's position.
+        let right_is_greater = order
+            .cmp(unsafe { hole.get(child + 1) }, unsafe { hole.get(child) })
+            == Ordering::Greater;
+        child += usize::from(right_is_greater);
+        // SAFETY: `child` is still below `end` and is not the hole.
+        unsafe { hole.move_to(child) };
+        child = hole.position.saturating_mul(2).saturating_add(1);
+    }
+    if child == end - 1 {
+        // SAFETY: `child` is the last index and greater than the hole's
+        // position.
+        unsafe { hole.move_to(child) };
+    }
+    let bottom = hole.position;
+    // Writes the element back at `bottom`.
+    drop(hole);
+    // SAFETY: `bottom` was a valid hole position, so it is in bounds.
+    unsafe { sift_up(data, order, position, bottom) };
 }
 
 impl<T: fmt::Debug, O> fmt::Debug for Heap<'_, T, O> {

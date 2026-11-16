@@ -7,6 +7,10 @@ over user-provided memory. See [storage](storage.md) and [errors](errors.md).
 
 - Open addressing with linear probing in one flat block: no per-entry
   allocation, cache-friendly probes.
+- Robin Hood ordering: on insert, an entry far from its home slot takes the
+  place of one that is closer. Probe lengths stay even, and a lookup for a
+  missing key stops as soon as it meets an entry closer to its home than the
+  key would be, instead of scanning to the next empty slot.
 - Each slot stores 31 bits of the key's hash, so most mismatches are rejected
   without comparing keys and nothing is rehashed on removal.
 - Removal uses backward-shift deletion: there are no tombstones, so

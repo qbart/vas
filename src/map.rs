@@ -34,6 +34,18 @@ const fn home(meta: u32, capacity: usize) -> usize {
     (((meta & !OCCUPIED) as u64 * capacity as u64) >> 31) as usize
 }
 
+/// How many slots past its home the entry with this `meta` sits when it is
+/// stored at `index`.
+#[inline]
+const fn probe_distance(meta: u32, index: usize, capacity: usize) -> usize {
+    let home = home(meta, capacity);
+    if index >= home {
+        index - home
+    } else {
+        index + capacity - home
+    }
+}
+
 #[inline]
 const fn next(index: usize, capacity: usize) -> usize {
     if index + 1 < capacity { index + 1 } else { 0 }
@@ -42,7 +54,7 @@ const fn next(index: usize, capacity: usize) -> usize {
 /// A fixed-capacity unordered map (hash table) that lives in memory provided
 /// by the caller.
 ///
-/// Open addressing with linear probing in one flat block. Lookups get slower
+/// Open addressing with Robin Hood linear probing in one flat block. Lookups get slower
 /// as the map fills up, so give it more room than the number of entries you
 /// expect (twice as much is a good default).
 ///
@@ -58,9 +70,14 @@ const fn next(index: usize, capacity: usize) -> usize {
 /// assert_eq!(map.remove(&7), Some("sword"));
 /// ```
 pub struct Map<'a, K, V, S = FastState> {
-    // Invariant: a slot's key and value are initialised exactly while its
-    // `meta` is not `EMPTY`, and every entry is reachable by probing forward
-    // from its home slot without crossing an empty slot.
+    // Invariants:
+    // - a slot's key and value are initialised exactly while its `meta` is
+    //   not `EMPTY`.
+    // - every entry is reachable by probing forward from its home slot
+    //   without crossing an empty slot.
+    // - Robin Hood order: along such a run, no entry is closer to its home
+    //   than the entry before it is to its own, minus one. Lookups rely on
+    //   this to stop early.
     slots: &'a mut [Slot<K, V>],
     len: usize,
     hasher: S,
@@ -180,16 +197,18 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         let meta = self.meta_for(&key);
         let capacity = self.slots.len();
         let mut index = home(meta, capacity);
+        let mut distance = 0;
+
+        // Look for the key, or for the place where it belongs: the first
+        // slot that is empty or holds an entry closer to its own home.
+        let mut has_place = false;
         for _ in 0..capacity {
             let Some(slot) = self.slots.get_mut(index) else {
                 break;
             };
             if slot.meta == EMPTY {
-                slot.key.write(key);
-                slot.value.write(value);
-                slot.meta = meta;
-                self.len += 1;
-                return Ok(None);
+                has_place = true;
+                break;
             }
             // SAFETY: the slot is occupied, so its key is initialised.
             if slot.meta == meta && *unsafe { slot.key.assume_init_ref() } == key {
@@ -197,9 +216,45 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
                 let old = mem::replace(unsafe { slot.value.assume_init_mut() }, value);
                 return Ok(Some(old));
             }
+            if probe_distance(slot.meta, index, capacity) < distance {
+                has_place = true;
+                break;
+            }
             index = next(index, capacity);
+            distance += 1;
         }
-        Err(Full((key, value)))
+        if !has_place || self.len == capacity {
+            return Err(Full((key, value)));
+        }
+
+        // Robin Hood insertion: the entry being carried takes the slot of
+        // any entry that is closer to its home, and that one is carried on.
+        // No user code runs here, so the table cannot be left half updated.
+        let mut carried = Slot {
+            meta,
+            key: MaybeUninit::new(key),
+            value: MaybeUninit::new(value),
+        };
+        for _ in 0..capacity {
+            let Some(slot) = self.slots.get_mut(index) else {
+                break;
+            };
+            if slot.meta == EMPTY {
+                *slot = carried;
+                self.len += 1;
+                return Ok(None);
+            }
+            let resident = probe_distance(slot.meta, index, capacity);
+            if resident < distance {
+                mem::swap(slot, &mut carried);
+                distance = resident;
+            }
+            index = next(index, capacity);
+            distance += 1;
+        }
+        // Not reachable: the map is not full, so the loop above finds an
+        // empty slot within `capacity` steps.
+        Ok(None)
     }
 
     /// The value stored under `key`.
@@ -263,32 +318,21 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         let entry = unsafe { (slot.key.assume_init_read(), slot.value.assume_init_read()) };
         self.len -= 1;
 
-        // Backward-shift deletion: close the hole by pulling later entries of
-        // the same probe run back, so no tombstones are needed and every
-        // entry stays reachable from its home slot.
-        let mut index = hole;
+        // Backward-shift deletion: pull the following entries back by one
+        // until an empty slot or an entry that is already at its home, so
+        // no tombstones are needed.
         for _ in 1..capacity {
-            index = next(index, capacity);
-            let Some(slot) = self.slots.get(index) else {
+            let following = next(hole, capacity);
+            let Some(slot) = self.slots.get(following) else {
                 break;
             };
-            if slot.meta == EMPTY {
+            if slot.meta == EMPTY || probe_distance(slot.meta, following, capacity) == 0 {
                 break;
             }
-            let home = home(slot.meta, capacity);
-            // An entry whose home lies cyclically in `(hole, index]` is still
-            // reachable where it is; any other entry must move into the hole.
-            let stays = if hole <= index {
-                hole < home && home <= index
-            } else {
-                hole < home || home <= index
-            };
-            if !stays {
-                if let Ok([empty, moved]) = self.slots.get_disjoint_mut([hole, index]) {
-                    mem::swap(empty, moved);
-                }
-                hole = index;
+            if let Ok([empty, moved]) = self.slots.get_disjoint_mut([hole, following]) {
+                mem::swap(empty, moved);
             }
+            hole = following;
         }
         Some(entry)
     }
@@ -310,7 +354,7 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
         let meta = self.meta_for(key);
         let capacity = self.slots.len();
         let mut index = home(meta, capacity);
-        for _ in 0..capacity {
+        for distance in 0..capacity {
             let slot = self.slots.get(index)?;
             if slot.meta == EMPTY {
                 return None;
@@ -318,6 +362,11 @@ impl<K: Hash + Eq, V, S: BuildHasher> Map<'_, K, V, S> {
             // SAFETY: the slot is occupied, so its key is initialised.
             if slot.meta == meta && unsafe { slot.key.assume_init_ref() }.borrow() == key {
                 return Some(index);
+            }
+            // An entry closer to its home than we are to ours would have
+            // been displaced by the key, so the key is not in the map.
+            if probe_distance(slot.meta, index, capacity) < distance {
+                return None;
             }
             index = next(index, capacity);
         }

@@ -156,3 +156,41 @@ fn orders_are_zero_sized() {
     assert_eq!(size_of::<Max>(), 0);
     assert_eq!(size_of::<Min>(), 0);
 }
+
+#[test]
+fn a_panicking_comparison_loses_and_duplicates_nothing() {
+    use core::cell::Cell;
+    use std::panic::{AssertUnwindSafe, catch_unwind, panic_any};
+
+    let drops = Cell::new(0);
+    let calls = Cell::new(0u32);
+    let fail_at = Cell::new(u32::MAX);
+    let mut memory = Memory::<Counted, 16>::new();
+    {
+        let order = |a: &Counted, b: &Counted| {
+            calls.set(calls.get() + 1);
+            if calls.get() == fail_at.get() {
+                panic_any("comparison failed");
+            }
+            a.1.cmp(&b.1)
+        };
+        let mut heap = Heap::with_order(&mut memory, order);
+        for priority in [5, 3, 8, 1, 9, 2, 7, 4, 6, 0] {
+            assert!(heap.push(Counted(&drops, priority)).is_ok());
+        }
+        // Fail in the middle of a pop, then in the middle of a push.
+        fail_at.set(calls.get() + 2);
+        let popped = catch_unwind(AssertUnwindSafe(|| heap.pop().map(|top| top.1)));
+        assert!(popped.is_err());
+        fail_at.set(calls.get() + 2);
+        let pushed = catch_unwind(AssertUnwindSafe(|| heap.push(Counted(&drops, 100)).is_ok()));
+        assert!(pushed.is_err());
+        fail_at.set(u32::MAX);
+        // 10 pushed, 1 taken out by the failed pop (and dropped during the
+        // unwind), 1 added by the failed push.
+        assert_eq!(drops.get(), 1);
+        assert_eq!(heap.len(), 10);
+    }
+    // Every element was dropped exactly once.
+    assert_eq!(drops.get(), 11);
+}

@@ -42,7 +42,10 @@ when it is popped (the usual approach in A*).
 
 ## Implementation
 
-Built on `Vector`, with no `unsafe` of its own.
+Built on `Vector`. Moving an element up or down the heap takes it out of the
+slice, shifts the others into the gap one by one, and writes it back at the
+end, which halves the memory writes compared with swapping. This uses
+`unsafe`; the gap is always closed again, even if a comparison panics.
 
 ## Guarantees
 
