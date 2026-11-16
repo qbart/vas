@@ -30,8 +30,8 @@ impl Particles {
 /// A struct of structs, all packed in the same block.
 struct World {
     particles: Particles,
-    enemies: Pool<'static, &'static str>,
-    item_names: Map<'static, u32, &'static str>,
+    enemies: Pool<&'static str, Borrowed<'static>>,
+    item_names: Map<u32, &'static str, Borrowed<'static>>,
     score: &'static mut u32,
 }
 

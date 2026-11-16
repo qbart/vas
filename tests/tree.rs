@@ -1,7 +1,7 @@
 use core::cell::Cell;
 use std::vec::Vec;
 use vas::tree::{InsertError, MoveError, NodeId, Slot};
-use vas::{Full, Memory, Rng, Tree};
+use vas::{Borrowed, Full, Memory, Rng, Tree};
 
 struct Counted<'a>(&'a Cell<usize>);
 
@@ -11,7 +11,10 @@ impl Drop for Counted<'_> {
     }
 }
 
-fn values<'t>(tree: &'t Tree<'_, u32>, ids: impl Iterator<Item = NodeId<u32>> + 't) -> Vec<u32> {
+fn values<'t>(
+    tree: &'t Tree<u32, Borrowed<'_>>,
+    ids: impl Iterator<Item = NodeId<u32>> + 't,
+) -> Vec<u32> {
     ids.filter_map(|id| tree.get(id).copied()).collect()
 }
 

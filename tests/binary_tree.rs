@@ -1,7 +1,7 @@
 use core::cell::Cell;
 use std::vec::Vec;
 use vas::binary_tree::{InsertError, NodeId, Slot};
-use vas::{BinaryTree, Memory, Rng};
+use vas::{BinaryTree, Borrowed, Memory, Rng};
 
 struct Counted<'a>(&'a Cell<usize>);
 
@@ -11,7 +11,10 @@ impl Drop for Counted<'_> {
     }
 }
 
-fn values(tree: &BinaryTree<'_, u32>, ids: impl Iterator<Item = NodeId<u32>>) -> Vec<u32> {
+fn values(
+    tree: &BinaryTree<u32, Borrowed<'_>>,
+    ids: impl Iterator<Item = NodeId<u32>>,
+) -> Vec<u32> {
     ids.filter_map(|id| tree.get(id).copied()).collect()
 }
 
