@@ -199,6 +199,8 @@ impl<'a, T, const D: usize> KdTree<'a, T, D> {
         self.search(near.0, near.1, depth + 1, target, consider);
         // The far side can only help if the plane is closer than the
         // current limit. A NaN offset proves nothing, so then it is searched.
+        // Offering a candidate at infinite distance changes nothing; it only
+        // reads back the limit, which the near side may have tightened.
         limit = limit.min(consider(usize::MAX, f32::INFINITY));
         let too_far = offset * offset >= limit;
         if !too_far {
