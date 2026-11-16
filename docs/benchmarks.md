@@ -82,6 +82,8 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | heap 50k push then pop | vas::Heap | 18.0 |
 | heap 50k push then pop | std BinaryHeap | 17.2 |
 | map 2000 keys: insert | vas::Map (50% full) | 1.7 |
+| map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 6.4 |
+| map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.2 |
 | map 2000 keys: insert | std HashMap (SipHash) | 5.7 |
 | map 2000 keys: insert | std HashMap + vas FastHasher | 2.8 |
 | map 2000 keys: hits | vas::Map (50% full) | 1.4 |
@@ -95,6 +97,8 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | map 2000 keys: insert then remove | vas::Map (50% full) | 2.5 |
 | map 2000 keys: insert then remove | std HashMap + vas FastHasher | 2.8 |
 | map 50000 keys: insert | vas::Map (50% full) | 4.8 |
+| map 50000 keys: insert | vas::Map (growing, `Dynamic`) | 18.3 |
+| map 50000 keys: insert | std HashMap + vas FastHasher (growing) | 8.3 |
 | map 50000 keys: insert | std HashMap (SipHash) | 6.6 |
 | map 50000 keys: insert | std HashMap + vas FastHasher | 3.3 |
 | map 50000 keys: hits | vas::Map (50% full) | 4.7 |

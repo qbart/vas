@@ -1,4 +1,4 @@
-//! Read-only directed graph in compressed form over user-provided memory.
+//! Read-only directed graph in compressed form over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -66,6 +66,9 @@ impl core::error::Error for BuildError {}
 ///
 /// assert!(graph.is_ok_and(|graph| graph.neighbors(0).len() == 2));
 /// ```
+///
+/// With [`Dynamic`](crate::Dynamic) storage `build` takes exactly the memory
+/// the graph needs from an allocator.
 pub struct StaticGraph<E, SO: Storage<u32>, SE: Storage<Edge<E>> = SO> {
     // Invariant: `offsets` has `node_count + 1` non-decreasing entries, the
     // first 0 and the last `edges.len()`. The edges of node `i` are

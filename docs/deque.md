@@ -44,3 +44,16 @@ The parameter `S` says where the memory lives; see
 
 Passing a `Memory` to `new` by value also gives inline storage. Functions
 that should accept either kind are generic over `S`.
+
+## Growing
+
+With `Deque<T, Dynamic<A>>`, `push_back` and `push_front` take more memory
+from the allocator `A` when the deque is full. The contents are put back
+into ring order with one move of the front piece.
+
+- `reserve(additional) -> Result<(), Full<()>>` makes room up front.
+- `push_overwrite` never grows: it keeps the last `capacity()` elements,
+  so `reserve` the history length first.
+- `Deque::<T, Dynamic<A>>::default()` when `A: Default` (e.g. `Global`).
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

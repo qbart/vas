@@ -166,7 +166,7 @@ pub struct Inline<const N: usize>;
 /// ```
 ///
 /// With the `alloc` feature the allocator defaults to
-/// [`Global`](crate::Global), so `Vector<f32, Dynamic>` grows on the heap.
+/// [`Global`], so `Vector<f32, Dynamic>` grows on the heap.
 #[cfg(feature = "alloc")]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Dynamic<A = Global>(pub A);

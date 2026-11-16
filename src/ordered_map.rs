@@ -1,4 +1,4 @@
-//! Fixed-capacity ordered map over user-provided memory.
+//! Ordered map over borrowed, inline or growing memory.
 
 use core::borrow::Borrow;
 use core::mem;
@@ -32,6 +32,9 @@ use crate::{Full, Vector};
 /// // The keyframe in effect at time 15.
 /// assert_eq!(keyframes.at_or_before(&15), Some((&10, &"step")));
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct OrderedMap<K, V, S: Storage<(K, V)>> {
     // Invariant: sorted by key, strictly increasing (no duplicate keys).
     entries: Vector<(K, V), S>,

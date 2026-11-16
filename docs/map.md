@@ -84,3 +84,28 @@ that should accept either kind are generic over `S`.
 
 The hasher parameter is now called `H` and comes after the storage:
 `Map<K, V, Borrowed<'a>, MyHasher>`.
+
+## Growing
+
+With `Map<K, V, Dynamic<A>>` the map moves to bigger storage when it gets
+more than 3/4 full, so lookups stay fast without sizing it by hand. The
+stored hash bits place the entries in the new storage; no key is hashed
+again.
+
+- `reserve(additional) -> Result<(), Full<()>>` makes room up front, at no
+  more than 3/4 full.
+- `insert` reports `Full` only when the allocator refuses *and* every slot
+  is taken: a map that cannot grow any more fills up completely, like a
+  fixed one.
+- `capacity()` is the number of slots, so it is larger than the number of
+  entries that fit before the next growth.
+- `Map::<K, V, Dynamic<A>, H>::default()` when `A: Default` and
+  `H: Default`.
+- Growing takes a new block and gives the old one back. In an `Arena` the
+  old block is left behind.
+- About 6 to 9 ns per insert of a new `u32` key while growing from empty
+  (a growing `std::HashMap` with the same hasher: about 10 ns at 2,000
+  keys and 8 ns at 50,000, where vas takes 18 to 26 ns). `reserve` first
+  to get the fixed-storage speed.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

@@ -76,9 +76,39 @@ and asks the allocator `A` for more when it runs out; see
 - The memory is given back when the container is dropped.
 - With the `alloc` feature `A` defaults to `Global`: `Vector<f32, Dynamic>`.
 
-**Which containers grow:** `Vector` (0.25.0). The other containers accept
-`Dynamic(allocator)` but do not grow yet: they start with a capacity of
-zero and report `Full`. They follow in the next releases.
+**Which containers grow:** all that take a storage parameter. Each
+container's page has a "Growing" section with the details.
+
+| Container | How it grows |
+|---|---|
+| `Vector`, `Heap`, `OrderedMap` | the block is extended, in place when the allocator can |
+| `Deque` | the block is extended, then the ring is put back in order |
+| `Pool`, `Tree`, `BinaryTree`, `Graph` | the block is extended; handles and ids stay valid |
+| `Map` | moves to a new block when more than 3/4 full |
+| `Bitset` | grows to hold the highest bit set |
+| `StaticGraph` | `build` takes exactly what the graph needs |
+| `SpatialGrid`, `Quadtree` / `Octree` | cells / nodes and entries grow as points are added |
+| `PathFinder` | node memory grows to the highest node touched; the open list never fills |
+
+`reserve` makes room up front on `Vector`, `Pool`, `Map`, `Deque`, `Heap`,
+`OrderedMap` and `PathFinder`. On fixed storage it only checks.
+
+A struct can own all of its containers without sizing any of them (here
+with the `alloc` feature and the global allocator):
+
+```rust
+#[derive(Default)]
+struct World {
+    enemies: Pool<Enemy, Dynamic>,
+    names: Map<u32, String, Dynamic>,
+    events: Deque<Event, Dynamic>,
+    roads: Graph<Town, f32, Dynamic>,
+    finder: PathFinder<Dynamic>,
+}
+```
+
+Fixed storage pays nothing for this: whether a buffer can grow is known at
+compile time, and the benchmarks for borrowed storage are unchanged.
 
 The pieces live in `vas::storage`:
 
@@ -86,7 +116,10 @@ The pieces live in `vas::storage`:
   as a bound (`S: Storage<T>`) to accept a container over any storage.
 - `Buffer<T>`: the slots themselves. An `unsafe` trait; containers rely on
   it returning the same slots every time, and on `grow(min)` keeping their
-  contents. Fixed buffers answer `grow` with `false`.
+  contents. `replace(min, transfer)` switches to a new block and lets the
+  container move its contents across (used by `Map`). Fixed buffers answer
+  both with `false`; `GROWS` says at compile time whether a buffer can
+  grow at all.
 - `IntoBuffer<T>`: what `new` accepts.
 
 Costs of the parameter:

@@ -79,3 +79,12 @@ the first. See [storage](storage.md#storage-parameter).
 
 Pass `Memory::new()` for both blocks to `build`. The two blocks may also use different kinds of storage. In
 a turbofish write both: `::<.., _, _>`.
+
+## Growing
+
+With `Dynamic` storage, `build` takes exactly `node_count + 1` offsets and
+`input.len()` edges from the allocator, so nothing has to be sized by hand:
+`StaticGraph::build(nodes, &edges, Dynamic(&arena), Dynamic(&arena))`. It
+reports `BuildError::Full` when the allocator refuses.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

@@ -1,4 +1,4 @@
-//! Shortest-path search (A* / Dijkstra) over user-provided memory.
+//! Shortest-path search (A* / Dijkstra) over borrowed, inline or growing memory.
 
 use core::cmp::Ordering;
 use core::fmt;
@@ -118,6 +118,10 @@ impl Order<Open> for Cheapest {
 /// assert_eq!(finder.find(&Row, 0, 3), Ok(3.0));
 /// assert!(finder.path_rev().eq([3, 2, 1, 0]));
 /// ```
+///
+/// With [`Dynamic`] storage the finder takes memory from an
+/// allocator as searches need it: node memory up to the highest node
+/// touched, and an open list that never fills up.
 pub struct PathFinder<SN: Storage<Node>, SO: Storage<Open> = SN> {
     // Every slot is initialised, so `nodes.len()` is the node capacity.
     nodes: Vector<Node, SN>,

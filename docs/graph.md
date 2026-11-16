@@ -84,3 +84,13 @@ the first. See [storage](storage.md#storage-parameter).
 
 `Graph::inline()` and `default()` create it; `inline()` is `const`. The two blocks may also use different kinds of storage. In
 a turbofish write both: `::<.., _, _>`.
+
+## Growing
+
+With `Graph<N, E, Dynamic<A>>`, `add_node` and `add_edge` take more memory
+from the allocator `A` when their block is full; nodes and edges grow
+independently. Node and edge ids stay valid. Pass the allocator twice:
+`Graph::new(Dynamic(&arena), Dynamic(&arena))`, or use `default()` when the
+allocators are `Default` (e.g. `Graph<N, E, Dynamic>` with `Global`).
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

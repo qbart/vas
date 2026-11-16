@@ -65,3 +65,13 @@ The parameter `S` says where the memory lives; see
 
 Passing a `Memory` to `new` by value also gives inline storage. Functions
 that should accept either kind are generic over `S`.
+
+## Growing
+
+With `OrderedMap<K, V, Dynamic<A>>`, inserting a new key takes more memory
+from the allocator `A` when the map is full.
+
+- `reserve(additional) -> Result<(), Full<()>>` makes room up front.
+- `OrderedMap::<K, V, Dynamic<A>>::default()` when `A: Default`.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

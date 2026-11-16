@@ -66,3 +66,11 @@ The parameter `S` says where the memory lives; see
 
 Passing a `Memory` to `new` by value also gives inline storage. Functions
 that should accept either kind are generic over `S`.
+
+## Growing
+
+With `Tree<T, Dynamic<A>>`, inserting a node takes more memory from the
+allocator `A` when the tree is full. Node ids stay valid.
+`Tree::<T, Dynamic<A>>::default()` exists when `A: Default`.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

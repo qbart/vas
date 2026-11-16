@@ -67,3 +67,16 @@ The parameter `S` says where the memory lives; see
 
 Passing a `Memory` to `new` by value also gives inline storage. Functions
 that should accept either kind are generic over `S`.
+
+## Growing
+
+With `Pool<T, Dynamic<A>>` an insert that finds no free slot takes more
+memory from the allocator `A` instead of failing. Handles stay valid: a
+slot's index never changes when the pool grows. Freed slots are reused
+before the pool grows again.
+
+- `reserve(additional) -> Result<(), Full<()>>` makes room up front.
+- `insert` reports `Full` only when the allocator refuses.
+- `Pool::<T, Dynamic<A>>::default()` when `A: Default` (e.g. `Global`).
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

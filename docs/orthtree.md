@@ -91,3 +91,14 @@ the first. See [storage](storage.md#storage-parameter).
 
 Pass `Memory::new()` for both blocks to `new`. The two blocks may also use different kinds of storage. In
 a turbofish write both: `::<.., _, _>`.
+
+## Growing
+
+With `Dynamic` storage the tree takes node memory as it subdivides and
+entry memory as points are inserted, so neither has to be sized by hand.
+Entry ids stay valid. `new` reports `NewError::Full` when the allocator
+refuses the first nodes; later, a refused node block only stops a leaf
+from splitting (as with full fixed storage), and a refused entry block
+makes `insert` report `Full`.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

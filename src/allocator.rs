@@ -8,7 +8,7 @@
 //! Ready-made allocators:
 //!
 //! - [`Arena`](crate::Arena): bump allocation from one block.
-//! - [`Global`] (with the `alloc` feature): the program's global allocator.
+//! - `Global` (with the `alloc` feature): the program's global allocator.
 //! - `&A` for any allocator `A`, so several containers can share one.
 
 #![allow(unsafe_code)]

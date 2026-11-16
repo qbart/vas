@@ -1,4 +1,4 @@
-//! Fixed-capacity quadtree / octree for points, over user-provided memory.
+//! Quadtree / octree for points, over borrowed, inline or growing memory.
 
 use core::fmt;
 
@@ -161,6 +161,9 @@ impl<const D: usize> Region<D> {
 ///     assert_eq!(seen, 1);
 /// }
 /// ```
+///
+/// With [`Dynamic`](crate::Dynamic) storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Orthtree<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>> = SN> {
     // Invariants:
     // - node 0 is the root; the children of a node are the `CHILDREN`

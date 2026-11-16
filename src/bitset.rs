@@ -1,4 +1,4 @@
-//! Fixed-capacity set of bits over user-provided memory.
+//! Set of bits over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -32,6 +32,9 @@ pub const fn words(bits: usize) -> usize {
 /// assert!(visited.contains(42));
 /// assert_eq!(visited.count(), 1);
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Bitset<S: Storage<u64>> {
     // Invariant: `used <= buffer.slots().len()` and the first `used` words
     // are initialised.

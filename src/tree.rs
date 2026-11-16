@@ -1,5 +1,5 @@
-//! Fixed-capacity hierarchy (parent / children / siblings) over
-//! user-provided memory.
+//! Hierarchy (parent / children / siblings) over borrowed,
+//! inline or growing memory.
 
 use core::fmt;
 
@@ -103,6 +103,9 @@ impl core::error::Error for MoveError {}
 ///     }
 /// }
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Tree<T, S: Storage<Slot<T>>> {
     // Invariant: all links refer to live nodes and are consistent with each
     // other (a node is in exactly one sibling list: its parent's, or the

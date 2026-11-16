@@ -73,3 +73,20 @@ the first. See [storage](storage.md#storage-parameter).
 
 Pass `Memory::new()` for both blocks to `new`. The two blocks may also use different kinds of storage. In
 a turbofish write both: `::<.., _, _>`.
+
+## Growing
+
+With `PathFinder<Dynamic<A>>` nothing is sized by hand:
+
+- Node memory grows to the highest node a search touches (start, goal and
+  every neighbour the space reports), 12 bytes per node. So node numbers
+  should be dense; a space that reports a huge node number makes the finder
+  ask for that much memory.
+- The open list grows as needed, so `PathError::Full` only means the
+  allocator refused.
+- `reserve(nodes) -> Result<(), Full<()>>` takes the node memory up front.
+- `PathFinder::<Dynamic<A>>::default()` when `A: Default` (e.g. `Global`).
+- With fixed storage nothing changes: a node past the end is
+  `PathError::OutOfBounds`.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

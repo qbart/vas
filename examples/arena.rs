@@ -5,7 +5,7 @@ use std::error::Error;
 
 use vas::arena::StaticBlock;
 use vas::pool::Slot;
-use vas::{Arena, Borrowed, Full, MB, Map, Pool, Vector};
+use vas::{Arena, Borrowed, Dynamic, Full, KB, MB, Map, Memory, Pool, Vector};
 
 /// 20 MB for everything, living as long as the program.
 static GAME_MEMORY: StaticBlock<{ MB(20) }> = StaticBlock::new();
@@ -74,6 +74,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(world.item_names.get(&7), Some(&"sword"));
     assert_eq!(*world.score, 10);
 
+    // Containers that grow: with `Dynamic` storage they take memory from an
+    // allocator as they fill up, so nothing is sized by hand. An arena is
+    // an allocator; one per frame is the typical use.
+    {
+        let mut frame_memory = Memory::<u8, { KB(64) }>::new();
+        let frame = Arena::new(&mut frame_memory);
+        let mut visible = Vector::new(Dynamic(&frame));
+        let mut layer_of = Map::new(Dynamic(&frame));
+        for id in 0..1000u32 {
+            visible.push(id)?;
+            layer_of.insert(id, id % 8)?;
+        }
+        assert_eq!(visible.len(), 1000);
+        assert_eq!(layer_of.get(&42), Some(&2));
+        println!("frame: used {} of {} bytes", frame.used(), frame.capacity());
+    }
+
     // The same from the heap, with the size chosen at run time. Needs the
     // `alloc` feature.
     #[cfg(feature = "alloc")]
@@ -90,6 +107,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut spawns = Vector::new(arena.alloc::<u32>(256)?);
             spawns.push(level)?;
         }
+
+        // Growing on the heap: `Dynamic` uses the global allocator.
+        let mut names = Vector::<String, Dynamic>::default();
+        let mut scores = Map::<u32, u32, Dynamic>::default();
+        for player in 0..100 {
+            names.push(format!("player {player}"))?;
+            scores.insert(player, player * 10)?;
+        }
+        assert_eq!(scores.get(&7), Some(&70));
         println!("heap: ok");
     }
 

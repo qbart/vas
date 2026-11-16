@@ -66,3 +66,13 @@ that should accept either kind are generic over `S`.
 
 `inline()` pops the largest first. For another order use
 `Heap::<T, Inline<N>, Min>::inline_with(Min)` or `default()`.
+
+## Growing
+
+With `Heap<T, Dynamic<A>>`, `push` takes more memory from the allocator `A`
+when the heap is full.
+
+- `reserve(additional) -> Result<(), Full<()>>` makes room up front.
+- `Heap::<T, Dynamic<A>, O>::default()` when `A: Default` and `O: Default`.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

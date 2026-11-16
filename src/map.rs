@@ -1,4 +1,4 @@
-//! Fixed-capacity unordered map over user-provided memory.
+//! Unordered map over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -66,6 +66,9 @@ const fn next(index: usize, capacity: usize) -> usize {
 /// assert_eq!(map.get(&7), Some(&"sword"));
 /// assert_eq!(map.remove(&7), Some("sword"));
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Map<K, V, S: Storage<Slot<K, V>>, H = FastState> {
     // Invariant: a slot's key and value are initialised exactly while its
     // `meta` is not `EMPTY`, and every entry is reachable by probing forward

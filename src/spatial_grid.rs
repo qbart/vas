@@ -1,5 +1,5 @@
-//! Fixed-capacity uniform grid for "what is near here" queries, over
-//! user-provided memory.
+//! Uniform grid for "what is near here" queries, over borrowed,
+//! inline or growing memory.
 
 use core::fmt;
 
@@ -79,6 +79,9 @@ impl core::error::Error for NewError {}
 ///     assert_eq!(near, 1);
 /// }
 /// ```
+///
+/// With [`Dynamic`](crate::Dynamic) storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct SpatialGrid<T, const D: usize, SC: Storage<u32>, SE: Storage<Slot<T, D>> = SC> {
     // Invariant: `cells[i]` is the head of a doubly linked list of exactly
     // the live entries whose `cell` is `i`.

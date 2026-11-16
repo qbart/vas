@@ -58,3 +58,18 @@ Passing a `Memory` to `new` by value also gives inline storage. Functions
 that should accept either kind are generic over `S`.
 
 For inline storage `N` counts 64-bit words, not bits.
+
+## Growing
+
+With `Bitset<Dynamic<A>>` the set starts with no bits and grows to hold the
+highest bit that is set.
+
+- `insert`, `set(index, true)` and `toggle` grow the set to reach `index`.
+  They report `OutOfBounds` only when the allocator refuses.
+- `set(index, false)`, `remove` and `contains` past the end need no memory:
+  such bits are clear.
+- `union_with` grows the set to hold the other set's highest bit.
+- The capacity at least doubles on each growth; new bits are clear.
+- `Bitset::<Dynamic<A>>::default()` when `A: Default` (e.g. `Global`).
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

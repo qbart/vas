@@ -123,6 +123,14 @@
 - [x] `Dynamic<A>` storage (`A` defaults to `Global` with `alloc`)
 - [x] `Vector` grows with dynamic storage; `Vector::reserve`
 
+## 0.26.0 — every container grows
+
+- [x] `Pool`, `Deque`, `Map`, `Bitset`, `Heap`, `OrderedMap`, `Tree`, `BinaryTree`, `Graph` grow with dynamic storage
+- [x] `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder` take what they need from the allocator
+- [x] `reserve` on `Pool`, `Map`, `Deque`, `Heap`, `OrderedMap`, `PathFinder`
+- [x] `Default` for containers with `Dynamic<A>` storage when `A: Default`
+- [x] `Map` no longer walks its slots on drop when keys and values need no drop
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -146,8 +154,10 @@
         (0.24.0): `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`,
         `PathFinder`. `Bvh` and `KdTree` stay views over the user's slice.
   - [x] Growing storage `Dynamic<A>` on `Vector` (0.25.0)
-  - [ ] Growing on the single-buffer containers: `Pool`, `Map`, `Deque`,
-        `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
-  - [ ] Growing on the two-buffer containers: `Graph`, `StaticGraph`,
-        `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
+  - [x] Growing on the single-buffer containers (0.26.0): `Pool`, `Map`,
+        `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
+  - [x] Growing on the two-buffer containers (0.26.0): `Graph`,
+        `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
+  - [ ] Growing `Map` is about 2x slower to fill than `std::HashMap` at
+        50,000 keys (faster at 2,000); goes with the denser layout above
   - [ ] `Clone` for containers with inline storage

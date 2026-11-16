@@ -1,4 +1,4 @@
-//! Fixed-capacity directed graph over user-provided memory.
+//! Directed graph over borrowed, inline or growing memory.
 
 use core::fmt;
 
@@ -113,6 +113,9 @@ impl Cost for f32 {
 ///     assert_eq!(graph.incoming(castle).count(), 1);
 /// }
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Graph<N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>> = SN> {
     // Invariant: every edge's `from` and `to` are live nodes, and every edge
     // is in exactly the out-list of `from` and the in-list of `to`.

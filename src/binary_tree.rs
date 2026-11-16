@@ -1,4 +1,4 @@
-//! Fixed-capacity binary tree over user-provided memory.
+//! Binary tree over borrowed, inline or growing memory.
 
 use core::fmt;
 
@@ -98,6 +98,9 @@ enum Order {
 ///     assert_eq!(text, [Some(&"1"), Some(&"+"), Some(&"2")]);
 /// }
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct BinaryTree<T, S: Storage<Slot<T>>> {
     // Invariant: all links refer to live nodes and are consistent with each
     // other; every live node is reachable from `root`.

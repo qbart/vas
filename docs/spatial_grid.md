@@ -83,3 +83,12 @@ the first. See [storage](storage.md#storage-parameter).
 
 Pass `Memory::new()` for both blocks to `new`; too few cells is reported as `NewError::Full`. The two blocks may also use different kinds of storage. In
 a turbofish write both: `::<.., _, _>`.
+
+## Growing
+
+With `Dynamic` storage, `new` takes the cell block (one `u32` per cell)
+from the allocator, and `insert` takes more entry memory when it runs out.
+Entry ids stay valid. `new` reports `NewError::Full` when the allocator
+refuses the cell block.
+
+See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

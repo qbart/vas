@@ -1,4 +1,4 @@
-//! Fixed-capacity pool with generational handles over user-provided memory.
+//! Pool with generational handles over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -124,6 +124,9 @@ impl<T> fmt::Debug for Handle<T> {
 /// [`storage`](crate::storage)): `Pool<T, Inline<N>>` holds them itself,
 /// `Pool<T, Borrowed<'a>>` uses memory you pass to [`new`](Self::new), sized
 /// in [`Slot<T>`]s.
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Pool<T, S: Storage<Slot<T>>> {
     // Invariants:
     // - the first `initialized` slots of the buffer are initialised `Slot`s.

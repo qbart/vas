@@ -1,4 +1,4 @@
-//! Fixed-capacity double-ended queue (ring buffer) over user-provided memory.
+//! Double-ended queue (ring buffer) over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -33,6 +33,9 @@ pub type IterMut<'d, T> = Chain<slice::IterMut<'d, T>, slice::IterMut<'d, T>>;
 /// assert!(queue.push_back(2).is_ok());
 /// assert_eq!(queue.pop_front(), Some(1));
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Deque<T, S: Storage<T>> {
     // Invariant: `head < capacity` (or `head == 0` when the capacity is
     // zero), `len <= capacity`, and the `len` slots starting at `head`,

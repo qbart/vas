@@ -1,4 +1,4 @@
-//! Fixed-capacity binary heap (priority queue) over user-provided memory.
+//! Binary heap (priority queue) over borrowed, inline or growing memory.
 
 #![allow(unsafe_code)]
 
@@ -79,6 +79,9 @@ impl<T, F: Fn(&T, &T) -> Ordering> Order<T> for F {
 /// assert!(open.push(0.5).is_ok());
 /// assert_eq!(open.pop(), Some(0.5));
 /// ```
+///
+/// With [`Dynamic`] storage the capacity is not fixed: the
+/// memory comes from an allocator and the container grows when it runs out.
 pub struct Heap<T, S: Storage<T>, O = Max> {
     // Invariant (heap property): no element is greater, by `order`, than its
     // parent at `(index - 1) / 2`.
