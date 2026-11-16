@@ -12,6 +12,14 @@ categories = ["no-std", "game-development", "data-structures", "algorithms"]
 
 [dependencies]
 
+[features]
+# Heap-backed blocks (`Arena::from_heap`, `arena::HeapBlock`) through the
+# global allocator. Off by default; vas itself never allocates unless asked.
+alloc = []
+
+[package.metadata.docs.rs]
+all-features = true
+
 [[bench]]
 name = "bench"
 harness = false

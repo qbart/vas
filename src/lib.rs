@@ -2,6 +2,9 @@
 
 #![no_std]
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 pub mod aabb;
 pub mod arena;
 pub mod binary_tree;
