@@ -24,9 +24,14 @@ Containers take a parameter `S` that says where their memory lives:
 `Vector<T, S>`, `Pool<T, S>`, `Map<K, V, S>`, `Deque<T, S>`, `Heap<T, S>`,
 `OrderedMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`, `BinaryTree<T, S>`.
 
-Containers with more than one block of memory (`Graph`, `StaticGraph`,
-`SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`) and the ones that are a
-view over your own slice (`Bvh`, `KdTree`) still borrow; see ROADMAP.
+Containers with two blocks of memory take two parameters, the second
+defaulting to the first: `Graph<N, E, SN, SE>`, `StaticGraph<E, SO, SE>`,
+`SpatialGrid<T, D, SC, SE>`, `Quadtree<T, SN, SE>` / `Octree<T, SN, SE>`,
+`PathFinder<SN, SO>`. So `Graph<N, E, Borrowed<'a>>` borrows both blocks and
+`Graph<N, E, Inline<64>, Inline<256>>` holds 64 nodes and 256 edges itself.
+
+`Bvh` and `KdTree` arrange a slice of items that you own, so they stay
+borrowed views with a lifetime.
 
 With inline storage a struct can own all of its containers, with no
 lifetime and no `Slot` types to name:

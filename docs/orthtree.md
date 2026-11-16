@@ -1,7 +1,7 @@
 # Quadtree and octree
 
-`Orthtree<'a, T, const D: usize>` is a tree that splits space into 2^D equal
-parts wherever points are crowded, over user-provided memory. `Quadtree<T>`
+`Orthtree<T, const D: usize, SN, SE = SN>` is a tree that splits space into 2^D equal
+parts wherever points are crowded, with [storage parameters](storage.md#storage-parameter). `Quadtree<T, SN, SE>`
 is the alias for `D = 2` and `Octree<T>` for `D = 3`; both are the same code.
 See [storage](storage.md), [errors](errors.md) and [aabb](aabb.md).
 
@@ -77,3 +77,17 @@ Queries report through a callback, so they need no memory for results.
 - Query results are exact: every matching entry is visited once, and no
   other.
 - Recursion is bounded by `max_depth` (at most 32 levels).
+
+## Storage
+
+There are two blocks of memory, so there are two storage parameters: the
+first for the nodes, the second for the entries. The second defaults to
+the first. See [storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Quadtree<T, Inline<256>, Inline<64>>` | inside the container: no lifetime, a plain struct field. The two numbers are the capacities of the two blocks |
+| `Quadtree<T, Borrowed<'a>>` | both blocks provided by the caller: `&mut Memory<..>`, arena pieces or any `&mut [MaybeUninit<..>]` |
+
+Pass `Memory::new()` for both blocks to `new`. The two blocks may also use different kinds of storage. In
+a turbofish write both: `::<.., _, _>`.

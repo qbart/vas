@@ -1,7 +1,7 @@
 # Path search
 
-`PathFinder<'a>` finds the cheapest path between two nodes with A* (or
-Dijkstra's algorithm when no heuristic is given), over user-provided memory.
+`PathFinder<SN, SO = SN>` finds the cheapest path between two nodes with A* (or
+Dijkstra's algorithm when no heuristic is given), with [storage parameters](storage.md#storage-parameter).
 See [storage](storage.md) and [errors](errors.md).
 
 ## The space
@@ -59,3 +59,17 @@ clear the node memory.
   one.
 - Running out of open-list memory is reported as `Full`; it never yields a
   wrong path.
+
+## Storage
+
+There are two blocks of memory, so there are two storage parameters: the
+first for the nodes, the second for the open-list entries. The second defaults to
+the first. See [storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `PathFinder<Inline<1024>, Inline<4096>>` | inside the container: no lifetime, a plain struct field. The two numbers are the capacities of the two blocks |
+| `PathFinder<Borrowed<'a>>` | both blocks provided by the caller: `&mut Memory<..>`, arena pieces or any `&mut [MaybeUninit<..>]` |
+
+Pass `Memory::new()` for both blocks to `new`. The two blocks may also use different kinds of storage. In
+a turbofish write both: `::<.., _, _>`.

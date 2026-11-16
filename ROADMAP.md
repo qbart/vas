@@ -109,6 +109,12 @@
 - [x] `Map`'s hasher parameter moved after the storage and renamed `H`
 - [x] `alloc` feature: `&mut Vec<MaybeUninit<T>>` and `&mut Box<[MaybeUninit<T>]>` accepted as borrowed storage
 
+## 0.24.0 — storage parameter on two-buffer containers
+
+- [x] `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder` take two storage parameters, the second defaulting to the first
+- [x] `Graph::inline()` (const) and `Default`
+- [x] `orthtree`, `spatial_grid` and `path` no longer contain `unsafe`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -128,9 +134,9 @@
         `Borrowed<'a>` and `Inline<N>`
   - [x] Storage parameter on the single-buffer containers (0.23.0): `Pool`,
         `Map`, `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
-  - [ ] Storage parameter on the containers with two blocks of memory:
-        `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`,
-        `PathFinder`
+  - [x] Storage parameter on the containers with two blocks of memory
+        (0.24.0): `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`,
+        `PathFinder`. `Bvh` and `KdTree` stay views over the user's slice.
   - [ ] Growing storage: a third choice of `S` backed by an allocator.
         `push` then grows instead of failing.
   - [ ] `Clone` for containers with inline storage

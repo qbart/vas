@@ -1,7 +1,6 @@
 # Graph
 
-`Graph<'a, N, E>` is a fixed-capacity directed graph over user-provided
-memory: nodes carrying a value `N`, connected by edges carrying a value `E`.
+`Graph<N, E, SN, SE = SN>` is a fixed-capacity directed graph, with [storage parameters](storage.md#storage-parameter): nodes carrying a value `N`, connected by edges carrying a value `E`.
 Nodes and edges can be added and removed at any time. See
 [storage](storage.md) and [errors](errors.md).
 
@@ -71,3 +70,17 @@ positions, so there is no heuristic and the search is Dijkstra's algorithm.
 - No allocation, no panics, no `unsafe` of its own.
 - An edge never outlives either of its nodes.
 - Values still in the graph are dropped when it is dropped.
+
+## Storage
+
+There are two blocks of memory, so there are two storage parameters: the
+first for the nodes, the second for the edges. The second defaults to
+the first. See [storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `Graph<N, E, Inline<64>, Inline<256>>` | inside the container: no lifetime, a plain struct field. The two numbers are the capacities of the two blocks |
+| `Graph<N, E, Borrowed<'a>>` | both blocks provided by the caller: `&mut Memory<..>`, arena pieces or any `&mut [MaybeUninit<..>]` |
+
+`Graph::inline()` and `default()` create it; `inline()` is `const`. The two blocks may also use different kinds of storage. In
+a turbofish write both: `::<.., _, _>`.

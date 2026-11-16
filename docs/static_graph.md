@@ -1,7 +1,7 @@
 # Static graph
 
-`StaticGraph<'a, E>` is a directed graph that is built once and then only
-read, over user-provided memory. See [storage](storage.md) and
+`StaticGraph<E, SO, SE = SO>` is a directed graph that is built once and then only
+read, with [storage parameters](storage.md#storage-parameter). See [storage](storage.md) and
 [errors](errors.md).
 
 Use it for graphs that do not change while they are searched: navigation
@@ -65,3 +65,17 @@ is no heuristic, so the search is Dijkstra's algorithm.
 
 - No allocation, no panics.
 - The graph is immutable once built.
+
+## Storage
+
+There are two blocks of memory, so there are two storage parameters: the
+first for the offsets (`node_count + 1` of them), the second for the edges. The second defaults to
+the first. See [storage](storage.md#storage-parameter).
+
+| Type | Memory |
+|---|---|
+| `StaticGraph<E, Inline<65>, Inline<256>>` | inside the container: no lifetime, a plain struct field. The two numbers are the capacities of the two blocks |
+| `StaticGraph<E, Borrowed<'a>>` | both blocks provided by the caller: `&mut Memory<..>`, arena pieces or any `&mut [MaybeUninit<..>]` |
+
+Pass `Memory::new()` for both blocks to `build`. The two blocks may also use different kinds of storage. In
+a turbofish write both: `::<.., _, _>`.
