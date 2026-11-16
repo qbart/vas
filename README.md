@@ -33,6 +33,7 @@ Containers so far:
 - `SpatialGrid`: uniform grid for box and radius queries (2D, 3D, ...)
 - `Quadtree` / `Octree`: adaptive space subdivision for box and radius queries
 - `Bvh`: bounding volume hierarchy for box, point and ray queries
+- `KdTree`: nearest-neighbour search
 
 Algorithms so far:
 
