@@ -1,7 +1,7 @@
 use core::cell::Cell;
 use std::vec::Vec;
 use vas::spatial_grid::{EntryId, NewError, Slot};
-use vas::{Aabb, Full, Memory, Rng, SpatialGrid};
+use vas::{Aabb, Borrowed, Full, Memory, Rng, SpatialGrid};
 
 struct Counted<'a>(&'a Cell<usize>);
 
@@ -15,7 +15,7 @@ fn world() -> Aabb<2> {
     Aabb::new([0.0, 0.0], [100.0, 100.0])
 }
 
-fn found(grid: &SpatialGrid<'_, u32, 2>, area: &Aabb<2>) -> Vec<u32> {
+fn found(grid: &SpatialGrid<u32, 2, Borrowed<'_>>, area: &Aabb<2>) -> Vec<u32> {
     let mut out = Vec::new();
     grid.query(area, |_, value| out.push(*value));
     out.sort_unstable();

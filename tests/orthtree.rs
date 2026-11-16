@@ -1,7 +1,7 @@
 use core::cell::Cell;
 use std::vec::Vec;
 use vas::orthtree::{EntryId, NewError, Node, Orthtree, Slot};
-use vas::{Aabb, Full, Memory, Octree, Quadtree, Rng};
+use vas::{Aabb, Borrowed, Full, Memory, Octree, Quadtree, Rng};
 
 struct Counted<'a>(&'a Cell<usize>);
 
@@ -15,7 +15,7 @@ fn world() -> Aabb<2> {
     Aabb::new([0.0, 0.0], [100.0, 100.0])
 }
 
-fn found(tree: &Quadtree<'_, u32>, area: &Aabb<2>) -> Vec<u32> {
+fn found(tree: &Quadtree<u32, Borrowed<'_>>, area: &Aabb<2>) -> Vec<u32> {
     let mut out = Vec::new();
     tree.query(area, |_, value| out.push(*value));
     out.sort_unstable();
