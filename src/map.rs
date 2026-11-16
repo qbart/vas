@@ -140,12 +140,14 @@ impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
         let mut buffer = buffer.into_buffer();
         let slots = buffer.slots_mut();
         let used = slots.len().min(u32::MAX as usize);
-        for slot in slots.iter_mut().take(used) {
-            slot.write(Slot {
-                meta: EMPTY,
-                key: MaybeUninit::uninit(),
-                value: MaybeUninit::uninit(),
-            });
+        if let Some(slots) = slots.get_mut(..used) {
+            for slot in slots {
+                slot.write(Slot {
+                    meta: EMPTY,
+                    key: MaybeUninit::uninit(),
+                    value: MaybeUninit::uninit(),
+                });
+            }
         }
         Self {
             buffer,

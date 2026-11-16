@@ -75,8 +75,10 @@ impl<S: Storage<u64>> Bitset<S> {
         let slots = buffer.slots_mut();
         // Cap the size so a bit index can never overflow `usize`.
         let used = slots.len().min(usize::MAX / BITS);
-        for word in slots.iter_mut().take(used) {
-            word.write(0);
+        if let Some(words) = slots.get_mut(..used) {
+            for word in words {
+                word.write(0);
+            }
         }
         Self { buffer, used }
     }
