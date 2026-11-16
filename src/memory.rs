@@ -4,30 +4,45 @@
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 
-/// One kilobyte: 1024 bytes.
+/// `count` kilobytes in bytes (1 KB = 1024 bytes).
 ///
-/// Sizes in vas are plain `usize` byte counts; write them with these units,
-/// which also work where a constant is required:
+/// Sizes in vas are plain `usize` byte counts; write them with [`KB`],
+/// [`MB`] and [`GB`]. They are `const`, so they also work where a constant
+/// is required:
 ///
 /// ```
 /// use vas::arena::StaticBlock;
 /// use vas::{KB, MB};
 ///
-/// static GAME_MEMORY: StaticBlock<{ 20 * MB }> = StaticBlock::new();
-/// assert_eq!(GAME_MEMORY.capacity(), 20 * 1024 * KB);
+/// static GAME_MEMORY: StaticBlock<{ MB(20) }> = StaticBlock::new();
+/// assert_eq!(GAME_MEMORY.capacity(), KB(20 * 1024));
 /// ```
-pub const KB: usize = 1024;
-
-/// One megabyte: 1024 [`KB`]. See [`KB`] for usage.
-#[cfg(not(target_pointer_width = "16"))]
-pub const MB: usize = 1024 * KB;
-
-/// One gigabyte: 1024 [`MB`]. See [`KB`] for usage.
 ///
-/// On 32-bit targets `4 * GB` does not fit in a `usize`; in a constant that
-/// is a compile error, not a wrong size.
+/// A size too large for a `usize` becomes `usize::MAX`, which no block can
+/// satisfy, so it is reported as [`Full`](crate::Full) rather than wrapping
+/// to a small size.
+// Named like the unit, so that sizes read as `MB(20)`.
+#[allow(non_snake_case)]
+#[inline]
+pub const fn KB(count: usize) -> usize {
+    count.saturating_mul(1 << 10)
+}
+
+/// `count` megabytes in bytes (1 MB = 1024 KB). See [`KB`].
 #[cfg(not(target_pointer_width = "16"))]
-pub const GB: usize = 1024 * MB;
+#[allow(non_snake_case)]
+#[inline]
+pub const fn MB(count: usize) -> usize {
+    count.saturating_mul(1 << 20)
+}
+
+/// `count` gigabytes in bytes (1 GB = 1024 MB). See [`KB`].
+#[cfg(not(target_pointer_width = "16"))]
+#[allow(non_snake_case)]
+#[inline]
+pub const fn GB(count: usize) -> usize {
+    count.saturating_mul(1 << 30)
+}
 
 /// An uninitialised block with room for `N` values of `T`, stored inline
 /// (on the stack, in a `static`, or inside another struct).
