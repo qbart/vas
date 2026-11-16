@@ -219,11 +219,12 @@ fn static_block_is_taken_once_and_gives_static_containers() {
     // It can only be taken once.
     assert!(BLOCK.take().is_none());
     if let Some(block) = block {
-        let arena = Arena::new(block);
-        let positions = arena.alloc(64).map(Vector::new);
-        let score = arena.alloc_value(0u32);
-        // The arena itself is not needed after setup.
-        drop(arena);
+        // The arena itself is only needed for setup: it goes out of scope
+        // here, and the pieces stay valid.
+        let (positions, score) = {
+            let arena = Arena::new(block);
+            (arena.alloc(64).map(Vector::new), arena.alloc_value(0u32))
+        };
         assert!(positions.is_ok() && score.is_ok());
         if let (Ok(positions), Ok(score)) = (positions, score) {
             let mut world = World { positions, score };

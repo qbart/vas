@@ -47,17 +47,20 @@ impl World {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let arena = Arena::new(GAME_MEMORY.take().ok_or("game memory already taken")?);
+    // The arena is only needed for setup. It goes out of scope at the end of
+    // this block; everything it handed out stays valid.
+    let mut world = {
+        let arena = Arena::new(GAME_MEMORY.take().ok_or("game memory already taken")?);
 
-    // Give one system a fixed budget of its own.
-    let audio = arena.sub(1 << 20)?;
-    let samples = Vector::<i16>::new(audio.alloc(48_000)?);
-    assert_eq!(samples.capacity(), 48_000);
+        // Give one system a fixed budget of its own.
+        let audio = arena.sub(1 << 20)?;
+        let samples = Vector::<i16>::new(audio.alloc(48_000)?);
+        assert_eq!(samples.capacity(), 48_000);
 
-    let mut world = World::new(&arena)?;
-    println!("used {} of {} bytes", arena.used(), arena.capacity());
-    // The arena is only needed for setup.
-    drop(arena);
+        let world = World::new(&arena)?;
+        println!("used {} of {} bytes", arena.used(), arena.capacity());
+        world
+    };
 
     world.particles.x.push(1.0)?;
     world.particles.y.push(2.0)?;

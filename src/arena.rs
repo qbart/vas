@@ -200,6 +200,9 @@ impl<const N: usize> StaticBlock<N> {
 
     /// Takes the block. Returns `None` on every call after the first, from
     /// any thread.
+    // Handing out `&mut` from `&self` is the point: the atomic flag makes
+    // sure it happens at most once.
+    #[allow(clippy::mut_from_ref)]
     #[inline]
     pub fn take(&'static self) -> Option<&'static mut [MaybeUninit<u8>]> {
         if self.taken.swap(true, Ordering::AcqRel) {
