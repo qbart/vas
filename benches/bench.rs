@@ -424,7 +424,7 @@ fn spatial() {
 
     let mut cells = block::<u32>(32 * 32);
     let mut entries = block::<vas::spatial_grid::Slot<u32, 2>>(N);
-    if let Ok(mut grid) = SpatialGrid::new(world, [32, 32], &mut cells, &mut entries) {
+    if let Ok(mut grid) = SpatialGrid::new(world, [32, 32], &mut cells[..], &mut entries[..]) {
         for (index, point) in points.iter().enumerate() {
             let _ = grid.insert(*point, index as u32);
         }
@@ -439,7 +439,7 @@ fn spatial() {
 
     let mut nodes = block::<vas::orthtree::Node>(1 + 4 * 4096);
     let mut entries = block::<vas::orthtree::Slot<u32, 2>>(N);
-    if let Ok(mut tree) = Quadtree::new(world, &mut nodes, &mut entries) {
+    if let Ok(mut tree) = Quadtree::new(world, &mut nodes[..], &mut entries[..]) {
         for (index, point) in points.iter().enumerate() {
             let _ = tree.insert(*point, index as u32);
         }
@@ -499,7 +499,7 @@ fn spatial() {
     let mut entries = block::<vas::spatial_grid::Slot<u32, 2>>(N);
     bench(group, "vas::SpatialGrid 32x32", N, || {
         let mut count = 0;
-        if let Ok(mut grid) = SpatialGrid::new(world, [32, 32], &mut cells, &mut entries) {
+        if let Ok(mut grid) = SpatialGrid::new(world, [32, 32], &mut cells[..], &mut entries[..]) {
             for (index, point) in points.iter().enumerate() {
                 let _ = grid.insert(*point, index as u32);
             }
@@ -511,7 +511,7 @@ fn spatial() {
     let mut entries = block::<vas::orthtree::Slot<u32, 2>>(N);
     bench(group, "vas::Quadtree", N, || {
         let mut count = 0;
-        if let Ok(mut tree) = Quadtree::new(world, &mut nodes, &mut entries) {
+        if let Ok(mut tree) = Quadtree::new(world, &mut nodes[..], &mut entries[..]) {
             for (index, point) in points.iter().enumerate() {
                 let _ = tree.insert(*point, index as u32);
             }
@@ -571,7 +571,7 @@ fn path() {
     }
     let mut nodes = block::<vas::path::Node>(cells);
     let mut open = block::<vas::path::Open>(4 * cells);
-    let mut finder = PathFinder::new(&mut nodes, &mut open);
+    let mut finder = PathFinder::new(&mut nodes[..], &mut open[..]);
     let goal = cells as u32 - 1;
     bench(
         "128x128 grid, corner to corner",

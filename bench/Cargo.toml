@@ -21,4 +21,4 @@ pathfinding = "4.16.0"
 rstar = "0.14.0"
 slab = "0.4.12"
 slotmap = "1.1.1"
-vas = { path = ".." }
+vas = { path = "..", features = ["alloc"] }
