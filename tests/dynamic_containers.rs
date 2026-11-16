@@ -247,7 +247,8 @@ fn heap_and_ordered_map_grow() {
         assert!(heap.push(value).is_ok());
         assert_eq!(sorted.insert(value, i), Ok(None));
     }
-    assert_eq!(heap.peek(), Some(&1008));
+    let greatest = (0..500u32).map(|i| (i * 7919) % 1009).max();
+    assert_eq!(heap.peek(), greatest.as_ref());
     assert_eq!(sorted.len(), 500);
     assert!(sorted.as_slice().is_sorted_by_key(|(key, _)| *key));
     let mut previous = u32::MAX;
