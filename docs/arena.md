@@ -110,6 +110,24 @@ for level in levels {
 Both return `Err(Full(()))` when the system cannot provide the block; they
 never panic or abort. The block is aligned to 16 bytes.
 
+## Growing containers inside an arena
+
+An arena is an [allocator](allocator.md), so containers with `Dynamic`
+storage can grow inside it without the `alloc` feature:
+
+```rust
+let arena = Arena::new(&mut block);
+let mut visible = Vector::new(Dynamic(&arena));
+assert!(visible.push(7u32).is_ok());
+```
+
+- The most recently handed out piece grows in place, and its space is
+  reused when its container is dropped.
+- Any other piece is left behind when its container grows (the elements
+  move to a new piece) or is dropped. That space comes back only when the
+  whole arena is thrown away, so this suits per-frame and per-level arenas.
+- When the block is used up the container reports `Full`.
+
 ## Freeing and starting over
 
 - Individual pieces are never freed.

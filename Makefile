@@ -21,11 +21,14 @@ examples:
 check: lint test examples
 	cargo fmt --check
 
+# One doc example (`Arena::from_heap`) leaks its block on purpose, so the
+# leak check is off for doc tests only.
 miri:
-	cargo +nightly miri test --all-features
+	cargo +nightly miri test --all-features --lib --tests
+	MIRIFLAGS=-Zmiri-ignore-leaks cargo +nightly miri test --all-features --doc
 
 bench:
-	cargo bench
+	cargo bench --all-features
 
 bench-crates:
 	cd bench && cargo run --release

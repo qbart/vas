@@ -56,7 +56,7 @@ use crate::Full;
 /// let allocator = Limited { arena: Arena::new(&mut block), limit: 64 };
 /// let mut v = Vector::new(Dynamic(&allocator));
 /// while v.push(0u8).is_ok() {}
-/// assert!(v.len() >= 32 && v.len() <= 64);
+/// assert!((32..=64).contains(&v.len()));
 /// ```
 ///
 /// # Safety

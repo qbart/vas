@@ -115,6 +115,14 @@
 - [x] `Graph::inline()` (const) and `Default`
 - [x] `orthtree`, `spatial_grid` and `path` no longer contain `unsafe`
 
+## 0.25.0 — dynamic storage
+
+- [x] `Allocator` trait (`allocate` / `free` / `grow`), implemented by the user
+- [x] `Arena` is an allocator: the last piece grows in place and is reclaimed when freed
+- [x] `Global` allocator behind the `alloc` feature
+- [x] `Dynamic<A>` storage (`A` defaults to `Global` with `alloc`)
+- [x] `Vector` grows with dynamic storage; `Vector::reserve`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -129,7 +137,7 @@
 - [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
 - [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
-  - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
+  - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)
   - [x] Storage parameter on `Vector` (0.22.0): `Vector<T, S>` with
         `Borrowed<'a>` and `Inline<N>`
   - [x] Storage parameter on the single-buffer containers (0.23.0): `Pool`,
@@ -137,7 +145,9 @@
   - [x] Storage parameter on the containers with two blocks of memory
         (0.24.0): `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`,
         `PathFinder`. `Bvh` and `KdTree` stay views over the user's slice.
-  - [ ] Growing storage: a third choice of `S` backed by an allocator.
-        `push` then grows instead of failing.
+  - [x] Growing storage `Dynamic<A>` on `Vector` (0.25.0)
+  - [ ] Growing on the single-buffer containers: `Pool`, `Map`, `Deque`,
+        `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
+  - [ ] Growing on the two-buffer containers: `Graph`, `StaticGraph`,
+        `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
   - [ ] `Clone` for containers with inline storage
-  - [ ] Name of the growing storage is undecided (`Growing<A>`, `Heap<A>`, `Dynamic<A>`, ...)

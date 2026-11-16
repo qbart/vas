@@ -1,13 +1,14 @@
 # Vector
 
-`Vector<T, S>` is a fixed-capacity, contiguous, growable-up-to-capacity array.
-The storage parameter `S` says where its memory lives. See
+`Vector<T, S>` is a contiguous array. The storage parameter `S` says where
+its memory lives, and whether the capacity is fixed or grows. See
 [storage](storage.md) and [errors](errors.md).
 
 | Type | Memory | Lifetime |
 |---|---|---|
 | `Vector<T, Borrowed<'a>>` | provided by the caller: a `Memory` block, an arena piece, any `&mut [MaybeUninit<T>]` | `'a` (`'static` for a static or heap arena) |
 | `Vector<T, Inline<N>>` | room for `N` elements inside the vector | none |
+| `Vector<T, Dynamic<A>>` | taken from the allocator `A`; grows | that of `A` (none for `Global`) |
 
 ```rust
 use vas::{Borrowed, Inline, Memory, Vector};
@@ -36,13 +37,15 @@ what makes it suitable for handing data to a renderer.
 
 | Operation | Signature | Notes |
 |---|---|---|
-| create | `new(buffer)` | a reference borrows (`&mut Memory`, `&mut [MaybeUninit<T>]`, arena piece); a value is stored inline (`Memory::new()`) |
+| create | `new(buffer)` | a reference borrows (`&mut Memory`, `&mut [MaybeUninit<T>]`, arena piece); a value is stored inline (`Memory::new()`); `Dynamic(allocator)` grows |
 | create inline | `Vector::<T, Inline<N>>::inline()`, `default()` | `inline` is `const`, so it can initialise a `static` |
-| sizes | `len`, `capacity`, `remaining`, `is_empty`, `is_full` | O(1) |
-| push | `push(T) -> Result<(), Full<T>>` | returns the value when full |
+| create dynamic | `Vector::<T, Dynamic<A>>::default()` | when `A: Default`, e.g. `Global` |
+| sizes | `len`, `capacity`, `remaining`, `is_empty`, `is_full` | O(1); `capacity` is what fits without growing |
+| reserve | `reserve(additional) -> Result<(), Full<()>>` | makes room for `additional` more elements; on fixed storage only checks |
+| push | `push(T) -> Result<(), Full<T>>` | returns the value when there is no room (fixed and full, or the allocator refused) |
 | pop | `pop() -> Option<T>` | `None` when empty |
 | bulk push | `extend_from_slice(&[T]) -> Result<(), Full<()>>` | `T: Copy`; all or nothing, one `memcpy` |
-| resize | `resize(usize, T) -> Result<(), Full<()>>`, `resize_with(usize, FnMut() -> T)` | `resize` needs `T: Clone`; fails unchanged when above capacity |
+| resize | `resize(usize, T) -> Result<(), Full<()>>`, `resize_with(usize, FnMut() -> T)` | `resize` needs `T: Clone`; fails unchanged when there is no room |
 | insert | `insert(usize, T) -> Result<(), InsertError<T>>` | O(n), keeps order; returns the value when full or out of bounds |
 | remove, ordered | `remove(usize) -> Option<T>` | O(n), keeps order |
 | remove, fast | `swap_remove(usize) -> Option<T>` | O(1), does not preserve order |
@@ -51,13 +54,29 @@ what makes it suitable for handing data to a renderer.
 
 ## Growing
 
-The vector never grows on its own. To grow, obtain a bigger block and call
+With `Dynamic<A>` storage `push`, `insert`, `extend_from_slice`, `resize`
+and `reserve` grow the vector through the allocator; see
+[storage](storage.md) and [allocator](allocator.md). About 1.0 ns per push
+of a `u64` against 0.8 with fixed storage and 0.9 for a growing `std::Vec`.
+
+```rust
+let mut block = Memory::<u8, 4096>::new();
+let arena = Arena::new(&mut block);
+let mut v = Vector::new(Dynamic(&arena)); // grows inside the arena
+assert!(v.push(1u32).is_ok());
+
+let mut heap = Vector::<u32, Dynamic>::default(); // `alloc` feature
+```
+
+With borrowed and inline storage the vector never grows on its own. To
+grow, obtain a bigger block and call
 `move_into(buffer) -> Result<Vector, Full<Vector>>`. It accepts the same
 things as `new`, so it can also change the kind of storage (borrowed to
 inline or back). It moves every
 element with one `memcpy` (any `T`), returns a vector over the new block and
 leaves the old block free. When the new block is too small the original
-vector is handed back unchanged.
+vector is handed back unchanged. `move_into(Dynamic(allocator))` turns a
+fixed vector into a growing one.
 
 ## Choosing a storage
 
@@ -66,6 +85,9 @@ vector is handed back unchanged.
   slots, used or not, and a large one on the stack can overflow it.
 - **Borrowed** for large blocks, for sizes chosen at run time, and for
   packing many containers into one budget with an [arena](arena.md).
+- **Dynamic** when no sensible upper bound is known. Inserts can move all
+  elements and take memory at a moment you do not choose; `reserve` up
+  front to avoid that in hot code.
 
 ## Limits of this version
 
@@ -82,13 +104,9 @@ vector is handed back unchanged.
 The type lives in the public module `vas::vector` and is re-exported as
 `vas::Vector`.
 
-## No `reserve`
-
-The capacity is fixed by the storage the user passed in, so there is nothing
-to reserve. Use `remaining()` to check for room up front.
-
 ## Guarantees
 
-- No allocation, no panics.
+- No panics. Memory is taken only through the allocator of `Dynamic<A>`;
+  with borrowed and inline storage nothing is ever allocated.
 - Elements still in the vector are dropped when it is dropped.
 - Zero-sized types and zero-capacity storage are supported.

@@ -1,16 +1,17 @@
 # Storage
 
-vas never allocates. Every container works on memory handed to it by the
-library user, who decides where that memory lives (stack, static, heap, arena,
-a mapped GPU buffer, ...).
+vas never allocates on its own. Every container works on memory handed to
+it by the library user, who decides where that memory lives (stack, static,
+heap, arena, a mapped GPU buffer, ...), or on memory it takes from an
+[allocator](allocator.md) the user picked.
 
 ## Convention
 
-- A container either borrows its storage for a lifetime `'a`
-  (`&'a mut [MaybeUninit<T>]`) or holds it inline; see "Storage parameter"
-  below.
-- The capacity of a container is the length of the storage slice. It never
-  changes; containers do not grow.
+- A container borrows its storage for a lifetime `'a`
+  (`&'a mut [MaybeUninit<T>]`), holds it inline, or takes it from an
+  allocator; see "Storage parameter" below.
+- The capacity of a container is the length of the storage slice. With
+  borrowed and inline storage it never changes. Only dynamic storage grows.
 - The container tracks which slots are initialised. Slots are initialised on
   insert and dropped on removal, `clear` or when the container is dropped.
 - When the container is dropped the storage is returned to the user in an
@@ -50,17 +51,42 @@ let world = World::default();
 |---|---|---|
 | `Borrowed<'a>` | provided by the caller, borrowed for `'a` | `&mut [MaybeUninit<T>]`, `&mut [MaybeUninit<T>; N]`, `&mut Memory<T, N>`; with the `alloc` feature also `&mut Vec<MaybeUninit<T>>` and `&mut Box<[MaybeUninit<T>]>` |
 | `Inline<N>` | `N` slots inside the container | `inline()`, `default()`, or `Memory<T, N>` / `[MaybeUninit<T>; N]` passed by value |
+| `Dynamic<A>` | taken from the allocator `A`, grows | `Dynamic(allocator)`, or `default()` when `A: Default` |
 
 The kind follows from what is passed to `new`: a reference borrows, a value
-is stored inline. In type position write `Vector<f32, Borrowed<'a>>` or
-`Vector<f32, Inline<1024>>`.
+is stored inline, `Dynamic(allocator)` grows. In type position write
+`Vector<f32, Borrowed<'a>>`, `Vector<f32, Inline<1024>>` or
+`Vector<f32, Dynamic<A>>`.
+
+## Dynamic storage
+
+`Dynamic<A>` is the storage that grows. The container starts with no memory
+and asks the allocator `A` for more when it runs out; see
+[allocator](allocator.md) for the trait and the ready-made allocators
+(`Arena`, `Global`, `&A`).
+
+- Inserting fails only when the allocator refuses. The error is the same
+  `Full` as for fixed storage, and nothing panics.
+- The capacity at least doubles on each growth (4 slots the first time), so
+  a run of pushes copies each element a constant number of times on
+  average. If the allocator cannot give the doubled size, exactly the
+  needed size is tried before giving up.
+- Growing moves the elements, so references into the container cannot be
+  held across an insert (the borrow checker enforces this).
+- The memory is given back when the container is dropped.
+- With the `alloc` feature `A` defaults to `Global`: `Vector<f32, Dynamic>`.
+
+**Which containers grow:** `Vector` (0.25.0). The other containers accept
+`Dynamic(allocator)` but do not grow yet: they start with a capacity of
+zero and report `Full`. They follow in the next releases.
 
 The pieces live in `vas::storage`:
 
-- `Storage<T>`: implemented by `Borrowed` and `Inline`. Use it as a bound
-  (`S: Storage<T>`) to accept a container over any storage.
+- `Storage<T>`: implemented by `Borrowed`, `Inline` and `Dynamic`. Use it
+  as a bound (`S: Storage<T>`) to accept a container over any storage.
 - `Buffer<T>`: the slots themselves. An `unsafe` trait; containers rely on
-  it returning the same slots every time.
+  it returning the same slots every time, and on `grow(min)` keeping their
+  contents. Fixed buffers answer `grow` with `false`.
 - `IntoBuffer<T>`: what `new` accepts.
 
 Costs of the parameter:

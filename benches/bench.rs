@@ -55,6 +55,14 @@ fn vector() {
         }
         v.len() as u64
     });
+    #[cfg(feature = "alloc")]
+    bench("push 100k u64", "vas::Vector (growing)", N, || {
+        let mut v = Vector::<u64, vas::Dynamic>::default();
+        for i in 0..N as u64 {
+            let _ = v.push(black_box(i));
+        }
+        v.len() as u64
+    });
     bench("push 100k u64", "std Vec (reserved)", N, || {
         let mut v = Vec::with_capacity(N);
         for i in 0..N as u64 {

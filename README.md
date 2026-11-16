@@ -3,7 +3,7 @@
 vas is a collection of data containers, structures and algorithms for game development in Rust focused on speed and memory control.
 
 - `no_std`, zero dependencies
-- never allocates: every container works on memory you provide (the optional `alloc` feature adds heap blocks you ask for by size)
+- never allocates on its own: every container works on memory you provide, or grows through an allocator you choose (the optional `alloc` feature adds heap blocks and the global allocator)
 - never panics: fallible operations return `Result` / `Option`
 
 ```rust
@@ -23,13 +23,16 @@ Memory:
 - `KB`, `MB`, `GB`: units for sizes, as in `Arena::from_heap(MB(20))`
 - `Arena`: one big block shared by many containers and values
 - `Arena::from_heap(bytes)`, `HeapBlock`: that block from the heap (`alloc` feature, off by default)
+- `Allocator`: the trait behind growing containers; implemented by `Arena` and, with `alloc`, `Global`
 
 Containers so far. All but `Bvh` and `KdTree` take a storage parameter (see
 `docs/storage.md`): `Pool<T, Inline<64>>` holds
 its own memory and is a plain struct field, `Pool<T, Borrowed<'a>>` uses
 memory you provide (a `Memory` block or an `Arena` piece).
+`Vector<T, Dynamic<A>>` grows through the allocator `A` (the other
+containers will follow).
 
-- `Vector`: fixed-capacity contiguous vector
+- `Vector`: contiguous vector, fixed-capacity or growing
 - `Pool`: fixed-capacity store with generational handles
 - `Map`: fixed-capacity unordered map
 - `OrderedMap`: fixed-capacity map sorted by key

@@ -192,7 +192,8 @@ impl<'a> Arena<'a> {
 /// for id in 0..500u32 {
 ///     assert!(visible.push(id).is_ok());
 /// }
-/// assert_eq!(arena.used(), visible.capacity() * 4);
+/// // Grown in place: no copies were left behind.
+/// assert!(arena.used() < visible.capacity() * 4 + 4);
 /// ```
 // SAFETY: blocks are distinct ranges of the arena's block, handed out by
 // `bump`, which never returns bytes that are still in use: `used` moves

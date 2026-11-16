@@ -74,6 +74,7 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | Case | Implementation | ns / op |
 |---|---|---:|
 | push 100k u64 | vas::Vector | 0.8 |
+| push 100k u64 | vas::Vector (growing, `Dynamic`) | 1.0 |
 | push 100k u64 | std Vec (reserved) | 0.8 |
 | push 100k u64 | std Vec (growing) | 0.8 |
 | queue 100k push+pop | vas::Deque | 2.2 |
