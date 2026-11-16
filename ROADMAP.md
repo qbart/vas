@@ -89,4 +89,9 @@
 
 - [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
 - [ ] Red-black tree
-- [ ] Allocator trait for containers that grow on their own
+- [ ] Growable containers
+  - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
+  - [ ] Growable vector and map as **separate types** built on the fixed ones;
+        the fixed types stay unchanged (decided)
+  - [ ] Naming is undecided: `DynVector` / `DynMap`, `GrowVector` / `GrowMap`,
+        or the same names in their own module (`vas::grow::Vector`)
