@@ -79,6 +79,11 @@
 
 - [x] `KdTree`: nearest and k-nearest neighbours, box and radius queries
 
+## 0.18.0 — arena
+
+- [x] `Arena`: one block shared by many containers and values
+- [x] `StaticBlock`: a `'static` block, so containers need no lifetime parameter
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -94,16 +99,19 @@
 - [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
   - [ ] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user
-  - [ ] Open design question: how containers use the allocator
-    - **Separate types** (current preference): today's fixed types stay
-      exactly as they are, and a growable vector and map are added as new
-      types built on them. Simple fixed case, no extra type parameter; the
-      cost is more type names.
-    - **One type with a storage parameter**: a single `Vector<T, S>` where
-      `S` is either a borrowed block (fixed, as today) or an allocator
-      (grows). One type to learn and code works for both; the cost is that
-      the extra parameter appears in every signature, and `push` means two
-      different things (fail when full, or grow).
-  - [ ] Naming is undecided (if separate types): `DynVector` / `DynMap`,
+  - [ ] Storage parameter (preferred direction): a single `Vector<T, S>` where
+        `S` says who holds the memory. Game data is structs of arrays and
+        structs of structs, and "who owns the memory" should be a choice per
+        field, not a different type each time. Choices of `S`:
+    - a borrowed block (today's behaviour)
+    - an inline array, so the container carries its own block and embeds
+      directly in a struct with no arena and no lifetime
+    - an allocator, so the container grows
+    - Cost: the extra parameter appears in every signature, and `push`
+      means two different things (fail when full, or grow).
+    - Alternative considered: keep the fixed types as they are and add
+      separate growable types. Simpler fixed case, but more type names and
+      no inline-owned storage.
+  - [ ] Naming is undecided (only matters if separate types are chosen): `DynVector` / `DynMap`,
         `GrowVector` / `GrowMap`, or the same names in their own module
         (`vas::grow::Vector`)

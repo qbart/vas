@@ -16,7 +16,7 @@ fmt:
 	cargo fmt
 
 examples:
-	for example in containers hierarchy pathfinding spatial; do cargo run -q --example $$example || exit 1; done
+	for example in arena containers hierarchy pathfinding spatial; do cargo run -q --example $$example || exit 1; done
 
 check: lint test examples
 	cargo fmt --check

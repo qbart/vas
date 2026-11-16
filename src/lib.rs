@@ -3,6 +3,7 @@
 #![no_std]
 
 pub mod aabb;
+pub mod arena;
 pub mod binary_tree;
 pub mod bitset;
 pub mod bvh;
@@ -25,6 +26,7 @@ pub mod tree;
 pub mod vector;
 
 pub use aabb::Aabb;
+pub use arena::Arena;
 pub use binary_tree::BinaryTree;
 pub use bitset::Bitset;
 pub use bvh::Bvh;

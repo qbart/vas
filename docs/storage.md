@@ -36,6 +36,11 @@ without an allocator a block's size cannot be chosen at run time. For
 run-time sizes, pass a `&mut [MaybeUninit<T>]` obtained from your own
 allocator straight to the container.
 
+## Arena
+
+To pack many containers and values into one block, and to keep containers in
+structs without a lifetime parameter, see [arena](arena.md).
+
 ## Example
 
 ```rust
