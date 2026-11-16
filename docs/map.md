@@ -7,15 +7,15 @@ over user-provided memory. See [storage](storage.md) and [errors](errors.md).
 
 - Open addressing with linear probing in one flat block: no per-entry
   allocation, cache-friendly probes.
-- Robin Hood ordering: on insert, an entry far from its home slot takes the
-  place of one that is closer. Probe lengths stay even, and a lookup for a
-  missing key stops as soon as it meets an entry closer to its home than the
-  key would be, instead of scanning to the next empty slot.
 - Each slot stores 31 bits of the key's hash, so most mismatches are rejected
   without comparing keys and nothing is rehashed on removal.
 - Removal uses backward-shift deletion: there are no tombstones, so
   performance does not degrade after many inserts and removes.
 - Iteration order is unspecified.
+
+Robin Hood probing was tried and measured: it made lookups of missing keys
+in a nearly full map much faster, but inserts about twice as slow and hits
+slightly slower at the recommended fill, so plain linear probing was kept.
 
 ## Storage
 
@@ -33,7 +33,9 @@ let mut map = Map::new(&mut memory);
 Creating a map marks every slot empty, so it is O(capacity). At most
 `u32::MAX` slots are used.
 
-The map can be filled to 100%, but probes get longer as it fills. Give it
+The map can be filled to 100%, but probes get longer as it fills, and a
+lookup for a key that is **not** in the map suffers most: at 90% full it is
+many times slower than at 50% (see [benchmarks](benchmarks.md)). Give the map
 about twice the number of entries you expect.
 
 ## Hashing

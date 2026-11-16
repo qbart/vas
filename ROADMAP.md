@@ -79,7 +79,15 @@
 
 - [x] `KdTree`: nearest and k-nearest neighbours, box and radius queries
 
+## Quality
+
+- [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
+- [ ] Usage examples, compiled with the checks
+- [ ] CI
+
 ## Later
+
+- [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
 
 - [ ] Red-black tree
 - [ ] Allocator trait for containers that grow on their own

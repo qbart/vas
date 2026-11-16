@@ -157,6 +157,8 @@ fn orders_are_zero_sized() {
     assert_eq!(size_of::<Min>(), 0);
 }
 
+// The comparison has to panic on purpose here, to test recovery from it.
+#[allow(clippy::panic)]
 #[test]
 fn a_panicking_comparison_loses_and_duplicates_nothing() {
     use core::cell::Cell;

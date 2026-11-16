@@ -126,34 +126,48 @@ fn heap() {
     });
 }
 
-fn map() {
-    const N: usize = 50_000;
+fn map<const N: usize>() {
     let input = keys(N, 2);
     let misses = keys(N, 3);
 
     // Half full, as recommended.
     let mut memory = block::<vas::map::Slot<u32, u32>>(2 * N);
-    bench("map 50k insert", "vas::Map (50% full)", N, || {
-        let mut map = Map::new(&mut memory);
-        for key in &input {
-            let _ = map.insert(*key, *key);
-        }
-        map.len() as u64
-    });
-    bench("map 50k insert", "std HashMap (SipHash)", N, || {
-        let mut map = HashMap::with_capacity(N);
-        for key in &input {
-            map.insert(*key, *key);
-        }
-        map.len() as u64
-    });
-    bench("map 50k insert", "std HashMap + vas FastHasher", N, || {
-        let mut map = HashMap::with_capacity_and_hasher(N, FastState::default());
-        for key in &input {
-            map.insert(*key, *key);
-        }
-        map.len() as u64
-    });
+    bench(
+        &format!("map {N} keys: insert"),
+        "vas::Map (50% full)",
+        N,
+        || {
+            let mut map = Map::new(&mut memory);
+            for key in &input {
+                let _ = map.insert(*key, *key);
+            }
+            map.len() as u64
+        },
+    );
+    bench(
+        &format!("map {N} keys: insert"),
+        "std HashMap (SipHash)",
+        N,
+        || {
+            let mut map = HashMap::with_capacity(N);
+            for key in &input {
+                map.insert(*key, *key);
+            }
+            map.len() as u64
+        },
+    );
+    bench(
+        &format!("map {N} keys: insert"),
+        "std HashMap + vas FastHasher",
+        N,
+        || {
+            let mut map = HashMap::with_capacity_and_hasher(N, FastState::default());
+            for key in &input {
+                map.insert(*key, *key);
+            }
+            map.len() as u64
+        },
+    );
 
     let lookups = |name: &str, fill: usize| {
         let mut memory = block::<vas::map::Slot<u32, u32>>(fill);
@@ -161,13 +175,13 @@ fn map() {
         for key in &input {
             let _ = map.insert(*key, *key);
         }
-        bench("map 50k hits", name, N, || {
+        bench(&format!("map {N} keys: hits"), name, N, || {
             input
                 .iter()
                 .filter_map(|key| map.get(key))
                 .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
         });
-        bench("map 50k misses", name, N, || {
+        bench(&format!("map {N} keys: misses"), name, N, || {
             misses.iter().filter(|key| map.contains_key(*key)).count() as u64
         });
     };
@@ -183,15 +197,23 @@ fn map() {
         for key in input {
             map.insert(*key, *key);
         }
-        bench("map 50k hits", name, input.len(), || {
-            input
-                .iter()
-                .filter_map(|key| map.get(key))
-                .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
-        });
-        bench("map 50k misses", name, misses.len(), || {
-            misses.iter().filter(|key| map.contains_key(*key)).count() as u64
-        });
+        bench(
+            &format!("map {} keys: hits", input.len()),
+            name,
+            input.len(),
+            || {
+                input
+                    .iter()
+                    .filter_map(|key| map.get(key))
+                    .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+            },
+        );
+        bench(
+            &format!("map {} keys: misses", input.len()),
+            name,
+            misses.len(),
+            || misses.iter().filter(|key| map.contains_key(*key)).count() as u64,
+        );
     }
     std_lookups(
         "std HashMap (SipHash)",
@@ -208,7 +230,7 @@ fn map() {
 
     let mut memory = block::<vas::map::Slot<u32, u32>>(2 * N);
     bench(
-        "map 50k insert then remove",
+        &format!("map {N} keys: insert then remove"),
         "vas::Map (50% full)",
         2 * N,
         || {
@@ -220,7 +242,7 @@ fn map() {
         },
     );
     bench(
-        "map 50k insert then remove",
+        &format!("map {N} keys: insert then remove"),
         "std HashMap + vas FastHasher",
         2 * N,
         || {
@@ -572,7 +594,8 @@ fn main() {
     vector();
     deque();
     heap();
-    map();
+    map::<2_000>();
+    map::<50_000>();
     ordered_map();
     pool();
     bitset();
