@@ -215,8 +215,7 @@ fn matches_brute_force() {
     let mut model: Vec<(EntryId<usize, 2>, [f32; 2], bool)> = Vec::new();
     let mut rng = Rng::new(9001);
     let steps = if cfg!(miri) { 120 } else { 3000 };
-    let mut random_point =
-        |rng: &mut Rng| [rng.f32_range(-20.0, 120.0), rng.f32_range(-20.0, 120.0)];
+    let random_point = |rng: &mut Rng| [rng.f32_range(-20.0, 120.0), rng.f32_range(-20.0, 120.0)];
     for _ in 0..steps {
         let live: Vec<usize> = (0..model.len())
             .filter(|key| model.get(*key).is_some_and(|entry| entry.2))
