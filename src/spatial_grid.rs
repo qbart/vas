@@ -1,15 +1,12 @@
 //! Fixed-capacity uniform grid for "what is near here" queries, over
 //! user-provided memory.
 
-#![allow(unsafe_code)]
+use core::fmt;
 
-use core::mem::MaybeUninit;
-use core::{fmt, slice};
-
-use crate::Full;
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
-use crate::storage::Borrowed;
+use crate::storage::{IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// "No entry" in a link.
 const NONE: u32 = u32::MAX;
@@ -82,11 +79,11 @@ impl core::error::Error for NewError {}
 ///     assert_eq!(near, 1);
 /// }
 /// ```
-pub struct SpatialGrid<'a, T, const D: usize> {
+pub struct SpatialGrid<T, const D: usize, SC: Storage<u32>, SE: Storage<Slot<T, D>> = SC> {
     // Invariant: `cells[i]` is the head of a doubly linked list of exactly
     // the live entries whose `cell` is `i`.
-    cells: &'a mut [u32],
-    entries: Pool<Entry<T, D>, Borrowed<'a>>,
+    cells: Vector<u32, SC>,
+    entries: Pool<Entry<T, D>, SE>,
     bounds: Aabb<D>,
     // Number of cells along each axis.
     counts: [u32; D],
@@ -94,19 +91,26 @@ pub struct SpatialGrid<'a, T, const D: usize> {
     scale: [f32; D],
 }
 
-impl<'a, T, const D: usize> SpatialGrid<'a, T, D> {
+impl<T, const D: usize, SC: Storage<u32>, SE: Storage<Slot<T, D>>> SpatialGrid<T, D, SC, SE> {
     /// Creates an empty grid covering `bounds` with `counts` cells along
     /// each axis.
     ///
     /// `cells` needs one `u32` per cell (the product of `counts`); `entries`
     /// sets how many points the grid can hold. Initialises the cell memory,
     /// so creation is O(cells).
-    pub fn new(
+    ///
+    /// References to memory borrow it; `Memory` blocks passed by value are
+    /// stored inside the grid.
+    pub fn new<BC, BE>(
         bounds: Aabb<D>,
         counts: [u32; D],
-        cells: &'a mut [MaybeUninit<u32>],
-        entries: &'a mut [MaybeUninit<Slot<T, D>>],
-    ) -> Result<Self, NewError> {
+        cells: BC,
+        entries: BE,
+    ) -> Result<Self, NewError>
+    where
+        BC: IntoBuffer<u32, Storage = SC>,
+        BE: IntoBuffer<Slot<T, D>, Storage = SE>,
+    {
         if D == 0 {
             return Err(NewError::Invalid);
         }
@@ -134,14 +138,8 @@ impl<'a, T, const D: usize> SpatialGrid<'a, T, D> {
         if u32::try_from(total).is_err() {
             return Err(NewError::Invalid);
         }
-        let cells = cells.get_mut(..total).ok_or(NewError::Full)?;
-        for cell in cells.iter_mut() {
-            cell.write(NONE);
-        }
-        // SAFETY: every element was just initialised, and
-        // `MaybeUninit<u32>` has the layout of `u32`.
-        let cells =
-            unsafe { slice::from_raw_parts_mut(cells.as_mut_ptr().cast::<u32>(), cells.len()) };
+        let mut cells = Vector::new(cells);
+        cells.resize(total, NONE).map_err(|_| NewError::Full)?;
         Ok(Self {
             cells,
             entries: Pool::new(entries),

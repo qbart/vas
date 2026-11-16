@@ -26,29 +26,29 @@ fn found(grid: &SpatialGrid<u32, 2, Borrowed<'_>>, area: &Aabb<2>) -> Vec<u32> {
 fn new_checks_its_arguments() {
     let mut cells = Memory::<u32, 16>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
-    let grid = SpatialGrid::<u32, 2>::new(world(), [4, 4], &mut cells, &mut entries);
+    let grid = SpatialGrid::<u32, 2, _, _>::new(world(), [4, 4], &mut cells, &mut entries);
     assert!(grid.is_ok_and(|grid| grid.is_empty() && grid.capacity() == 4));
 
     let mut cells = Memory::<u32, 15>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
-    let grid = SpatialGrid::<u32, 2>::new(world(), [4, 4], &mut cells, &mut entries);
+    let grid = SpatialGrid::<u32, 2, _, _>::new(world(), [4, 4], &mut cells, &mut entries);
     assert_eq!(grid.err(), Some(NewError::Full));
 
     let mut cells = Memory::<u32, 16>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
-    let grid = SpatialGrid::<u32, 2>::new(world(), [4, 0], &mut cells, &mut entries);
+    let grid = SpatialGrid::<u32, 2, _, _>::new(world(), [4, 0], &mut cells, &mut entries);
     assert_eq!(grid.err(), Some(NewError::Invalid));
 
     let mut cells = Memory::<u32, 16>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
     let flat = Aabb::new([0.0, 0.0], [100.0, 0.0]);
-    let grid = SpatialGrid::<u32, 2>::new(flat, [4, 4], &mut cells, &mut entries);
+    let grid = SpatialGrid::<u32, 2, _, _>::new(flat, [4, 4], &mut cells, &mut entries);
     assert_eq!(grid.err(), Some(NewError::Invalid));
 
     let mut cells = Memory::<u32, 16>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
     let endless = Aabb::new([0.0, 0.0], [f32::INFINITY, 1.0]);
-    let grid = SpatialGrid::<u32, 2>::new(endless, [4, 4], &mut cells, &mut entries);
+    let grid = SpatialGrid::<u32, 2, _, _>::new(endless, [4, 4], &mut cells, &mut entries);
     assert_eq!(grid.err(), Some(NewError::Invalid));
 }
 

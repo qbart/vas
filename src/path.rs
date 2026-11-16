@@ -1,14 +1,10 @@
 //! Shortest-path search (A* / Dijkstra) over user-provided memory.
 
-#![allow(unsafe_code)]
-
 use core::cmp::Ordering;
-use core::mem::MaybeUninit;
-use core::{fmt, slice};
+use core::fmt;
 
 use crate::heap::{Heap, Order};
-use crate::storage::Borrowed;
-use crate::storage::Storage;
+use crate::storage::{IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// The thing being searched: anything that can list the neighbours of a
@@ -121,16 +117,17 @@ impl Order<Open> for Cheapest {
 /// assert_eq!(finder.find(&Row, 0, 3), Ok(3.0));
 /// assert!(finder.path_rev().eq([3, 2, 1, 0]));
 /// ```
-pub struct PathFinder<'a> {
-    nodes: &'a mut [Node],
-    open: Heap<Open, Borrowed<'a>, Cheapest>,
+pub struct PathFinder<SN: Storage<Node>, SO: Storage<Open> = SN> {
+    // Every slot is initialised, so `nodes.len()` is the node capacity.
+    nodes: Vector<Node, SN>,
+    open: Heap<Open, SO, Cheapest>,
     // Identifies the current search; see `Node::stamp`.
     stamp: u32,
     // Start and goal of the last search, when it found a path.
     found: Option<(u32, u32)>,
 }
 
-impl<'a> PathFinder<'a> {
+impl<SN: Storage<Node>, SO: Storage<Open>> PathFinder<SN, SO> {
     /// Creates a finder for a space of `nodes.len()` nodes, with `open` as
     /// the memory for its open list.
     ///
@@ -140,18 +137,22 @@ impl<'a> PathFinder<'a> {
     /// [`PathError::Full`], never a wrong path.
     ///
     /// Initialises the node memory, so creation is O(nodes).
-    pub fn new(nodes: &'a mut [MaybeUninit<Node>], open: &'a mut [MaybeUninit<Open>]) -> Self {
-        for node in nodes.iter_mut() {
-            node.write(Node {
-                stamp: 0,
-                parent: 0,
-                cost: 0.0,
-            });
-        }
-        // SAFETY: every element was just initialised, and
-        // `MaybeUninit<Node>` has the layout of `Node`.
-        let nodes =
-            unsafe { slice::from_raw_parts_mut(nodes.as_mut_ptr().cast::<Node>(), nodes.len()) };
+    ///
+    /// References to memory borrow it; `Memory` blocks passed by value are
+    /// stored inside the finder.
+    pub fn new<BN, BO>(nodes: BN, open: BO) -> Self
+    where
+        BN: IntoBuffer<Node, Storage = SN>,
+        BO: IntoBuffer<Open, Storage = SO>,
+    {
+        let mut nodes = Vector::new(nodes);
+        let capacity = nodes.capacity();
+        // Cannot fail: the length asked for is the capacity.
+        let _ = nodes.resize_with(capacity, || Node {
+            stamp: 0,
+            parent: 0,
+            cost: 0.0,
+        });
         Self {
             nodes,
             open: Heap::with_order(open, Cheapest),
@@ -263,7 +264,7 @@ impl<'a> PathFinder<'a> {
     #[inline]
     pub fn path_rev(&self) -> PathRev<'_> {
         PathRev {
-            nodes: self.nodes,
+            nodes: self.nodes.as_slice(),
             next: self.found.map(|(_, goal)| goal),
             start: self.found.map_or(0, |(start, _)| start),
             remaining: self.nodes.len(),

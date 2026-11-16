@@ -1,12 +1,11 @@
 //! Fixed-capacity directed graph over user-provided memory.
 
 use core::fmt;
-use core::mem::MaybeUninit;
 
 use crate::Full;
 use crate::path::Space;
 use crate::pool::{self, Handle, Pool};
-use crate::storage::Borrowed;
+use crate::storage::{Inline, IntoBuffer, Storage};
 
 /// "No edge" in a link.
 const NONE: u32 = u32::MAX;
@@ -113,20 +112,46 @@ impl Cost for f32 {
 ///     assert_eq!(graph.incoming(castle).count(), 1);
 /// }
 /// ```
-pub struct Graph<'a, N, E> {
+pub struct Graph<N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>> = SN> {
     // Invariant: every edge's `from` and `to` are live nodes, and every edge
     // is in exactly the out-list of `from` and the in-list of `to`.
-    nodes: Pool<Node<N>, Borrowed<'a>>,
-    edges: Pool<Edge<E>, Borrowed<'a>>,
+    nodes: Pool<Node<N>, SN>,
+    edges: Pool<Edge<E>, SE>,
 }
 
-impl<'a, N, E> Graph<'a, N, E> {
-    /// Creates an empty graph using the two blocks as its memory.
+impl<N, E, const NODES: usize, const EDGES: usize> Graph<N, E, Inline<NODES>, Inline<EDGES>> {
+    /// Creates an empty graph with room for `NODES` nodes and `EDGES` edges
+    /// inside itself.
+    ///
+    /// This is `const`, so it can initialise a `static`.
     #[inline]
-    pub fn new(
-        nodes: &'a mut [MaybeUninit<NodeSlot<N>>],
-        edges: &'a mut [MaybeUninit<EdgeSlot<E>>],
-    ) -> Self {
+    pub const fn inline() -> Self {
+        Self {
+            nodes: Pool::inline(),
+            edges: Pool::inline(),
+        }
+    }
+}
+
+impl<N, E, const NODES: usize, const EDGES: usize> Default
+    for Graph<N, E, Inline<NODES>, Inline<EDGES>>
+{
+    #[inline]
+    fn default() -> Self {
+        Self::inline()
+    }
+}
+
+impl<N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> Graph<N, E, SN, SE> {
+    /// Creates an empty graph on `nodes` and `edges`. References to memory
+    /// borrow it; `Memory` blocks passed by value are stored inside the
+    /// graph.
+    #[inline]
+    pub fn new<BN, BE>(nodes: BN, edges: BE) -> Self
+    where
+        BN: IntoBuffer<NodeSlot<N>, Storage = SN>,
+        BE: IntoBuffer<EdgeSlot<E>, Storage = SE>,
+    {
         Self {
             nodes: Pool::new(nodes),
             edges: Pool::new(edges),
@@ -318,7 +343,7 @@ impl<'a, N, E> Graph<'a, N, E> {
     /// Iterates over the edges leaving `id`, as `(edge, target node)`, most
     /// recently added first.
     #[inline]
-    pub fn outgoing(&self, id: NodeId<N>) -> Outgoing<'_, 'a, N, E> {
+    pub fn outgoing(&self, id: NodeId<N>) -> Outgoing<'_, N, E, SN, SE> {
         Outgoing {
             graph: self,
             next: self.nodes.get(id).map_or(NONE, |node| node.first_out),
@@ -328,7 +353,7 @@ impl<'a, N, E> Graph<'a, N, E> {
     /// Iterates over the edges entering `id`, as `(edge, source node)`, most
     /// recently added first.
     #[inline]
-    pub fn incoming(&self, id: NodeId<N>) -> Incoming<'_, 'a, N, E> {
+    pub fn incoming(&self, id: NodeId<N>) -> Incoming<'_, N, E, SN, SE> {
         Incoming {
             graph: self,
             next: self.nodes.get(id).map_or(NONE, |node| node.first_in),
@@ -381,7 +406,7 @@ impl<'a, N, E> Graph<'a, N, E> {
 /// `path::Node` per unit of [`Graph::node_capacity`].
 ///
 /// There is no heuristic, so the search is Dijkstra's algorithm.
-impl<N, E: Cost> Space for Graph<'_, N, E> {
+impl<N, E: Cost, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> Space for Graph<N, E, SN, SE> {
     fn neighbors<F: FnMut(u32, f32)>(&self, node: u32, mut visit: F) {
         let mut next = self.nodes.get_at(node).map_or(NONE, |node| node.first_out);
         while let Some(edge) = self.edges.get_at(next) {
@@ -392,12 +417,14 @@ impl<N, E: Cost> Space for Graph<'_, N, E> {
 }
 
 /// Iterator over the edges leaving a node. See [`Graph::outgoing`].
-pub struct Outgoing<'g, 'a, N, E> {
-    graph: &'g Graph<'a, N, E>,
+pub struct Outgoing<'g, N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> {
+    graph: &'g Graph<N, E, SN, SE>,
     next: u32,
 }
 
-impl<N, E> Iterator for Outgoing<'_, '_, N, E> {
+impl<N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> Iterator
+    for Outgoing<'_, N, E, SN, SE>
+{
     type Item = (EdgeId<E>, NodeId<N>);
 
     #[inline]
@@ -410,12 +437,14 @@ impl<N, E> Iterator for Outgoing<'_, '_, N, E> {
 }
 
 /// Iterator over the edges entering a node. See [`Graph::incoming`].
-pub struct Incoming<'g, 'a, N, E> {
-    graph: &'g Graph<'a, N, E>,
+pub struct Incoming<'g, N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> {
+    graph: &'g Graph<N, E, SN, SE>,
     next: u32,
 }
 
-impl<N, E> Iterator for Incoming<'_, '_, N, E> {
+impl<N, E, SN: Storage<NodeSlot<N>>, SE: Storage<EdgeSlot<E>>> Iterator
+    for Incoming<'_, N, E, SN, SE>
+{
     type Item = (EdgeId<E>, NodeId<N>);
 
     #[inline]

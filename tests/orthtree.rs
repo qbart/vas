@@ -26,7 +26,7 @@ fn found(tree: &Quadtree<u32, Borrowed<'_>>, area: &Aabb<2>) -> Vec<u32> {
 fn new_checks_its_arguments() {
     let mut nodes = Memory::<Node, 9>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
-    let tree = Quadtree::<u32>::new(world(), &mut nodes, &mut entries);
+    let tree = Quadtree::<u32, _, _>::new(world(), &mut nodes, &mut entries);
     assert!(
         tree.is_ok_and(|tree| tree.is_empty() && tree.capacity() == 4 && tree.node_count() == 1)
     );
@@ -34,7 +34,7 @@ fn new_checks_its_arguments() {
     let mut nodes = Memory::<Node, 0>::new();
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
     assert_eq!(
-        Quadtree::<u32>::new(world(), &mut nodes, &mut entries).err(),
+        Quadtree::<u32, _, _>::new(world(), &mut nodes, &mut entries).err(),
         Some(NewError::Full)
     );
 
@@ -42,7 +42,7 @@ fn new_checks_its_arguments() {
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
     let flat = Aabb::new([0.0, 0.0], [0.0, 10.0]);
     assert_eq!(
-        Quadtree::<u32>::new(flat, &mut nodes, &mut entries).err(),
+        Quadtree::<u32, _, _>::new(flat, &mut nodes, &mut entries).err(),
         Some(NewError::Invalid)
     );
 
@@ -50,7 +50,7 @@ fn new_checks_its_arguments() {
     let mut entries = Memory::<Slot<u32, 2>, 4>::new();
     let endless = Aabb::new([0.0, 0.0], [f32::INFINITY, 10.0]);
     assert_eq!(
-        Quadtree::<u32>::new(endless, &mut nodes, &mut entries).err(),
+        Quadtree::<u32, _, _>::new(endless, &mut nodes, &mut entries).err(),
         Some(NewError::Invalid)
     );
 }

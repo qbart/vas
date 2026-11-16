@@ -2,11 +2,12 @@
 
 #![allow(unsafe_code)]
 
-use core::mem::MaybeUninit;
-use core::{fmt, slice};
+use core::fmt;
 
+use crate::Vector;
 use crate::graph::Cost;
 use crate::path::Space;
+use crate::storage::{IntoBuffer, Storage};
 
 /// One outgoing edge of a [`StaticGraph`]: the node it leads to and its
 /// value.
@@ -65,41 +66,45 @@ impl core::error::Error for BuildError {}
 ///
 /// assert!(graph.is_ok_and(|graph| graph.neighbors(0).len() == 2));
 /// ```
-pub struct StaticGraph<'a, E> {
+pub struct StaticGraph<E, SO: Storage<u32>, SE: Storage<Edge<E>> = SO> {
     // Invariant: `offsets` has `node_count + 1` non-decreasing entries, the
     // first 0 and the last `edges.len()`. The edges of node `i` are
     // `edges[offsets[i]..offsets[i + 1]]`.
-    offsets: &'a [u32],
-    edges: &'a [Edge<E>],
+    offsets: Vector<u32, SO>,
+    edges: Vector<Edge<E>, SE>,
 }
 
-impl<'a, E: Copy> StaticGraph<'a, E> {
+impl<E: Copy, SO: Storage<u32>, SE: Storage<Edge<E>>> StaticGraph<E, SO, SE> {
     /// Builds a graph of `node_count` nodes from `(from, to, value)` triples
     /// in any order.
     ///
     /// `offsets` needs `node_count + 1` entries and `edges` one entry per
     /// input edge. The edges of each node keep the order they have in
     /// `input`. O(nodes + edges), no extra memory.
-    pub fn build(
+    pub fn build<BO, BE>(
         node_count: usize,
         input: &[(u32, u32, E)],
-        offsets: &'a mut [MaybeUninit<u32>],
-        edges: &'a mut [MaybeUninit<Edge<E>>],
-    ) -> Result<Self, BuildError> {
+        offsets: BO,
+        edges: BE,
+    ) -> Result<Self, BuildError>
+    where
+        BO: IntoBuffer<u32, Storage = SO>,
+        BE: IntoBuffer<Edge<E>, Storage = SE>,
+    {
         let offset_count = node_count.checked_add(1).ok_or(BuildError::Full)?;
         if u32::try_from(input.len()).is_err() {
             return Err(BuildError::Full);
         }
-        let offsets = offsets.get_mut(..offset_count).ok_or(BuildError::Full)?;
-        let edges = edges.get_mut(..input.len()).ok_or(BuildError::Full)?;
-
-        for offset in offsets.iter_mut() {
-            offset.write(0);
-        }
-        // SAFETY: every entry was just initialised, and `MaybeUninit<u32>`
-        // has the layout of `u32`.
-        let offsets =
-            unsafe { slice::from_raw_parts_mut(offsets.as_mut_ptr().cast::<u32>(), offsets.len()) };
+        let mut offsets_vector = Vector::new(offsets);
+        offsets_vector
+            .resize(offset_count, 0)
+            .map_err(|_| BuildError::Full)?;
+        let offsets = offsets_vector.as_mut_slice();
+        let mut edges_vector = Vector::new(edges);
+        let edges = edges_vector
+            .slots_mut()
+            .get_mut(..input.len())
+            .ok_or(BuildError::Full)?;
 
         // Count the edges leaving each node, one position ahead.
         for (from, to, _) in input {
@@ -143,14 +148,17 @@ impl<'a, E: Copy> StaticGraph<'a, E> {
 
         // SAFETY: the cursors of the nodes partition `0..input.len()` and
         // each input edge was written at a distinct cursor position, so all
-        // `input.len()` slots are initialised. `MaybeUninit<Edge<E>>` has
-        // the layout of `Edge<E>`.
-        let edges = unsafe { slice::from_raw_parts(edges.as_ptr().cast::<Edge<E>>(), edges.len()) };
-        Ok(Self { offsets, edges })
+        // `input.len()` slots are initialised. `input.len()` fits the
+        // vector, as checked when taking the slots.
+        unsafe { edges_vector.set_len(input.len()) };
+        Ok(Self {
+            offsets: offsets_vector,
+            edges: edges_vector,
+        })
     }
 }
 
-impl<E> StaticGraph<'_, E> {
+impl<E, SO: Storage<u32>, SE: Storage<Edge<E>>> StaticGraph<E, SO, SE> {
     /// Number of nodes in the graph.
     #[inline]
     pub const fn node_count(&self) -> usize {
@@ -189,7 +197,7 @@ impl<E> StaticGraph<'_, E> {
 /// A graph whose edges have a [`Cost`] can be searched directly by a
 /// [`PathFinder`](crate::PathFinder). There is no heuristic, so the search
 /// is Dijkstra's algorithm.
-impl<E: Cost> Space for StaticGraph<'_, E> {
+impl<E: Cost, SO: Storage<u32>, SE: Storage<Edge<E>>> Space for StaticGraph<E, SO, SE> {
     #[inline]
     fn neighbors<F: FnMut(u32, f32)>(&self, node: u32, mut visit: F) {
         for edge in StaticGraph::neighbors(self, node) {
@@ -198,7 +206,7 @@ impl<E: Cost> Space for StaticGraph<'_, E> {
     }
 }
 
-impl<E: fmt::Debug> fmt::Debug for StaticGraph<'_, E> {
+impl<E: fmt::Debug, SO: Storage<u32>, SE: Storage<Edge<E>>> fmt::Debug for StaticGraph<E, SO, SE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map()
             .entries((0..self.node_count()).map(|node| (node, self.neighbors(node as u32))))

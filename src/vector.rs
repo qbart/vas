@@ -341,6 +341,24 @@ impl<T, S: Storage<T>> Vector<T, S> {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), len) }
     }
 
+    /// All slots, initialised or not. Together with [`set_len`](Self::set_len)
+    /// this lets a container fill slots out of order.
+    #[inline]
+    pub(crate) fn slots_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        self.buffer.slots_mut()
+    }
+
+    /// Declares the first `len` slots initialised.
+    ///
+    /// # Safety
+    ///
+    /// `len` must not exceed the capacity and the first `len` slots must be
+    /// initialised.
+    #[inline]
+    pub(crate) unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
+    }
+
     #[inline]
     fn as_mut_ptr(&mut self) -> *mut T {
         self.buffer.slots_mut().as_mut_ptr().cast::<T>()

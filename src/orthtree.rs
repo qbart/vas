@@ -1,14 +1,11 @@
 //! Fixed-capacity quadtree / octree for points, over user-provided memory.
 
-#![allow(unsafe_code)]
+use core::fmt;
 
-use core::mem::MaybeUninit;
-use core::{fmt, slice};
-
-use crate::Full;
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
-use crate::storage::Borrowed;
+use crate::storage::{IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// "No node" / "no entry" in a link.
 const NONE: u32 = u32::MAX;
@@ -49,10 +46,10 @@ pub type Slot<T, const D: usize> = pool::Slot<Entry<T, D>>;
 pub type EntryId<T, const D: usize> = Handle<Entry<T, D>>;
 
 /// An [`Orthtree`] in two dimensions: each node splits into four.
-pub type Quadtree<'a, T> = Orthtree<'a, T, 2>;
+pub type Quadtree<T, SN, SE = SN> = Orthtree<T, 2, SN, SE>;
 
 /// An [`Orthtree`] in three dimensions: each node splits into eight.
-pub type Octree<'a, T> = Orthtree<'a, T, 3>;
+pub type Octree<T, SN, SE = SN> = Orthtree<T, 3, SN, SE>;
 
 /// Why an [`Orthtree`] could not be created.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -164,15 +161,15 @@ impl<const D: usize> Region<D> {
 ///     assert_eq!(seen, 1);
 /// }
 /// ```
-pub struct Orthtree<'a, T, const D: usize> {
+pub struct Orthtree<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>> = SN> {
     // Invariants:
     // - node 0 is the root; the children of a node are the `CHILDREN`
     //   consecutive nodes starting at `first_child`.
     // - a leaf's list holds exactly the live entries whose `node` is that
     //   leaf; inner nodes have no entries of their own.
     // - `count` of every node is the number of entries in its subtree.
-    nodes: &'a mut [Node],
-    entries: Pool<Entry<T, D>, Borrowed<'a>>,
+    nodes: Vector<Node, SN>,
+    entries: Pool<Entry<T, D>, SE>,
     root: Region<D>,
     bounds: Aabb<D>,
     leaf_size: u32,
@@ -185,7 +182,7 @@ pub struct Orthtree<'a, T, const D: usize> {
     live_nodes: u32,
 }
 
-impl<'a, T, const D: usize> Orthtree<'a, T, D> {
+impl<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>>> Orthtree<T, D, SN, SE> {
     /// Number of children of a node that has been split.
     const CHILDREN: u32 = 1 << D;
 
@@ -196,24 +193,28 @@ impl<'a, T, const D: usize> Orthtree<'a, T, D> {
     /// are left, leaves simply hold more entries, so the tree keeps working
     /// but gets slower in crowded areas.
     #[inline]
-    pub fn new(
-        bounds: Aabb<D>,
-        nodes: &'a mut [MaybeUninit<Node>],
-        entries: &'a mut [MaybeUninit<Slot<T, D>>],
-    ) -> Result<Self, NewError> {
+    pub fn new<BN, BE>(bounds: Aabb<D>, nodes: BN, entries: BE) -> Result<Self, NewError>
+    where
+        BN: IntoBuffer<Node, Storage = SN>,
+        BE: IntoBuffer<Slot<T, D>, Storage = SE>,
+    {
         Self::with_limits(bounds, 8, 16, nodes, entries)
     }
 
     /// Like [`new`](Self::new), with a chosen `leaf_size` (entries a leaf
     /// may hold before it is split; at least 1) and `max_depth` (levels of
     /// subdivision; at most 32).
-    pub fn with_limits(
+    pub fn with_limits<BN, BE>(
         bounds: Aabb<D>,
         leaf_size: u32,
         max_depth: u32,
-        nodes: &'a mut [MaybeUninit<Node>],
-        entries: &'a mut [MaybeUninit<Slot<T, D>>],
-    ) -> Result<Self, NewError> {
+        nodes: BN,
+        entries: BE,
+    ) -> Result<Self, NewError>
+    where
+        BN: IntoBuffer<Node, Storage = SN>,
+        BE: IntoBuffer<Slot<T, D>, Storage = SE>,
+    {
         if D == 0 || D > 8 {
             return Err(NewError::Invalid);
         }
@@ -228,18 +229,14 @@ impl<'a, T, const D: usize> Orthtree<'a, T, D> {
             }
             *half *= 0.5;
         }
-        let usable = nodes.len().min((u32::MAX - 1) as usize);
-        let nodes = nodes.get_mut(..usable).ok_or(NewError::Full)?;
-        if nodes.is_empty() {
+        let mut nodes = Vector::new(nodes);
+        let usable = nodes.capacity().min((u32::MAX - 1) as usize);
+        if usable == 0 {
             return Err(NewError::Full);
         }
-        for node in nodes.iter_mut() {
-            node.write(Node::leaf(NONE));
-        }
-        // SAFETY: every element was just initialised, and
-        // `MaybeUninit<Node>` has the layout of `Node`.
-        let nodes =
-            unsafe { slice::from_raw_parts_mut(nodes.as_mut_ptr().cast::<Node>(), nodes.len()) };
+        nodes
+            .resize(usable, Node::leaf(NONE))
+            .map_err(|_| NewError::Full)?;
         Ok(Self {
             nodes,
             entries: Pool::new(entries),
