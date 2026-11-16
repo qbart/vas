@@ -32,6 +32,7 @@ Containers so far:
 - `StaticGraph`: read-only directed graph, built once
 - `SpatialGrid`: uniform grid for box and radius queries (2D, 3D, ...)
 - `Quadtree` / `Octree`: adaptive space subdivision for box and radius queries
+- `Bvh`: bounding volume hierarchy for box, point and ray queries
 
 Algorithms so far:
 

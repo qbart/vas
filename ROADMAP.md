@@ -71,12 +71,15 @@
 
 - [x] `Quadtree` / `Octree`: one implementation (`Orthtree`) for any dimension
 
+## 0.16.0 — bvh
+
+- [x] `Bvh`: bounding volume hierarchy with box, point and ray queries, and refit
+
 ## Planned
 
 All structures are index-based (nodes live in user-provided blocks and refer
 to each other by index or handle), never pointer-based.
 
-- [ ] 0.16.0 — BVH
 - [ ] 0.17.0 — k-d tree
 
 ## Later

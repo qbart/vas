@@ -21,5 +21,6 @@ of any math library convert at no cost.
 | create | `new(a, b)`, `point(p)`, `around(center, radius)` |
 | measure | `center()`, `size()` |
 | point tests | `contains_point(&p)`, `distance_squared(&p)` |
+| ray test | `ray(&origin, &direction, max_distance) -> Option<f32>` (entry distance; 0 when starting inside) |
 | box tests | `contains(&other)`, `intersects(&other)` |
 | combine | `union(&other)`, `grown(&p)`, `expanded(margin)` |

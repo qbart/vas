@@ -5,6 +5,7 @@
 pub mod aabb;
 pub mod binary_tree;
 pub mod bitset;
+pub mod bvh;
 pub mod deque;
 mod error;
 pub mod graph;
@@ -25,6 +26,7 @@ pub mod vector;
 pub use aabb::Aabb;
 pub use binary_tree::BinaryTree;
 pub use bitset::Bitset;
+pub use bvh::Bvh;
 pub use deque::Deque;
 pub use error::{Full, InsertError, OutOfBounds};
 pub use graph::Graph;

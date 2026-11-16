@@ -44,3 +44,17 @@ fn box_tests() {
     assert_eq!(a.grown(&[3.0, -1.0]), Aabb::new([0.0, -1.0], [3.0, 2.0]));
     assert_eq!(a.expanded(1.0), Aabb::new([-1.0, -1.0], [3.0, 3.0]));
 }
+
+#[test]
+fn ray_tests() {
+    let b = Aabb::new([2.0, 0.0], [4.0, 2.0]);
+    assert_eq!(b.ray(&[0.0, 1.0], &[1.0, 0.0], 10.0), Some(2.0));
+    assert_eq!(b.ray(&[0.0, 1.0], &[1.0, 0.0], 1.5), None); // too short
+    assert_eq!(b.ray(&[0.0, 1.0], &[-1.0, 0.0], 10.0), None); // wrong way
+    assert_eq!(b.ray(&[0.0, 3.0], &[1.0, 0.0], 10.0), None); // parallel, outside
+    assert_eq!(b.ray(&[3.0, 1.0], &[0.0, 1.0], 10.0), Some(0.0)); // starts inside
+    assert_eq!(b.ray(&[0.0, 0.0], &[2.0, 1.0], 10.0), Some(1.0)); // unnormalised
+    assert_eq!(b.ray(&[0.0, 0.0], &[0.0, 0.0], 10.0), None); // no direction, outside
+    assert_eq!(b.ray(&[f32::NAN, 0.0], &[1.0, 0.0], 10.0), None);
+    assert_eq!(b.ray(&[0.0, 1.0], &[1.0, 0.0], f32::INFINITY), Some(2.0));
+}

@@ -143,6 +143,38 @@ impl<const D: usize> Aabb<D> {
             })
             .sum()
     }
+
+    /// Distance along a ray at which it enters the box, or `None` when the
+    /// ray misses it within `max_distance`. Zero when the ray starts inside.
+    ///
+    /// The ray starts at `origin` and runs along `direction`, which need
+    /// not be normalised: distances are in multiples of its length.
+    pub fn ray(&self, origin: &[f32; D], direction: &[f32; D], max_distance: f32) -> Option<f32> {
+        let mut enter = 0.0f32;
+        let mut exit = max_distance;
+        let axes = self
+            .min
+            .iter()
+            .zip(self.max.iter())
+            .zip(origin.iter().zip(direction.iter()));
+        for ((low, high), (start, step)) in axes {
+            if *step == 0.0 {
+                // Parallel to this pair of faces: must already be between
+                // them.
+                if !(low <= start && start <= high) {
+                    return None;
+                }
+                continue;
+            }
+            let (a, b) = ((low - start) / step, (high - start) / step);
+            if a.is_nan() || b.is_nan() {
+                return None;
+            }
+            enter = enter.max(a.min(b));
+            exit = exit.min(a.max(b));
+        }
+        (enter <= exit).then_some(enter)
+    }
 }
 
 /// Squared distance between two points.
