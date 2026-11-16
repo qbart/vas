@@ -28,10 +28,10 @@ pub struct Slot<K, V> {
 }
 
 /// Number of entries up to which a growable map of `capacity` slots is not
-/// yet crowded: 7/8 of the slots.
+/// yet crowded: 3/4 of the slots.
 #[inline]
 const fn roomy(capacity: usize) -> usize {
-    capacity - capacity / 8
+    capacity - capacity / 4
 }
 
 /// The slot an entry with this `meta` would ideally live in.
@@ -181,7 +181,7 @@ impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
 
     /// Number of slots: the maximum number of entries for borrowed and
     /// inline storage. With dynamic storage the map grows before it is
-    /// this full (at 7/8).
+    /// this full (at 3/4).
     #[inline]
     pub const fn capacity(&self) -> usize {
         self.used
@@ -204,11 +204,11 @@ impl<K, V, S: Storage<Slot<K, V>>, H> Map<K, V, S, H> {
     }
 
     /// Moves the map to bigger storage, sized so that `entries` entries
-    /// leave it at most 7/8 full. Returns `false`, with nothing changed,
+    /// leave it at most 3/4 full. Returns `false`, with nothing changed,
     /// when the storage cannot grow.
     #[cold]
     fn grow(&mut self, entries: usize) -> bool {
-        let Some(slots) = entries.checked_add(entries / 7 + 1) else {
+        let Some(slots) = entries.checked_add(entries / 3 + 1) else {
             return false;
         };
         let old_used = self.used;
@@ -321,7 +321,7 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>>, H: BuildHasher> Map<K, V, S, H> {
     /// is replaced, the existing key is kept), `Ok(None)` when it is new, and
     /// hands both back in [`Full`] when the key is new and there is no room.
     ///
-    /// With dynamic storage the map grows when it gets more than 7/8 full,
+    /// With dynamic storage the map grows when it gets more than 3/4 full,
     /// so there is no room only when the allocator refuses and every slot
     /// is taken.
     #[inline]
