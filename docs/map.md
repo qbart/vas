@@ -1,42 +1,70 @@
 # Map
 
-`Map<K, V, S, H = FastState>` is a fixed-capacity unordered map (hash table)
-with a [storage parameter](storage.md#storage-parameter). See [storage](storage.md) and [errors](errors.md).
+`Map<K, V, S, H = FastState>` is an unordered map (hash table) with a
+[storage parameter](storage.md#storage-parameter). See [storage](storage.md) and [errors](errors.md).
 
 ## Design
 
-- Open addressing with linear probing in one flat block: no per-entry
-  allocation, cache-friendly probes.
-- Each slot stores 31 bits of the key's hash, so most mismatches are rejected
-  without comparing keys and nothing is rehashed on removal.
+- Open addressing with linear probing: no per-entry allocation.
+- Two blocks of memory of the same length. One holds the keys and values
+  (`map::Slot<K, V>`, exactly the size of a key and a value). The other
+  holds one byte per slot, the *tag*: 0 for an empty slot, otherwise the
+  top bit plus 7 bits of the key's hash.
+- A lookup reads 8 tags at once and compares a key only when its tag
+  matches. The tags of 64 slots share one cache line, so a probe that
+  walks past many slots touches little memory, and a missing key is
+  usually rejected without looking at any key.
 - Removal uses backward-shift deletion: there are no tombstones, so
-  performance does not degrade after many inserts and removes.
+  performance does not degrade after many inserts and removes. The
+  entries that follow the removed one are hashed again to decide whether
+  they move up.
 - Iteration order is unspecified.
 
-Robin Hood probing was tried and measured: it made lookups of missing keys
-in a nearly full map much faster, but inserts about twice as slow and hits
-slightly slower at the recommended fill, so plain linear probing was kept.
+Earlier versions kept a 4-byte tag next to every key and value in one
+block. That needed 12 bytes per `u32 -> u32` entry (now 9) and scanned slot
+by slot, so it was slow above half full and on maps larger than the CPU
+cache. See [benchmarks](benchmarks.md).
+
+Robin Hood probing was tried and measured on the old layout: it made
+lookups of missing keys in a nearly full map much faster, but inserts about
+twice as slow, so it was not kept.
 
 ## Storage
 
-The map needs one `map::Slot<K, V>` per entry (key, value and 4 bytes of
-bookkeeping, plus padding):
+The map needs one `map::Slot<K, V>` and one `u8` per entry:
 
 ```rust
 use vas::map::Slot;
 use vas::{Map, Memory};
 
-let mut memory = Memory::<Slot<u32, f32>, 512>::new();
-let mut map = Map::new(&mut memory);
+let mut slots = Memory::<Slot<u32, f32>, 512>::new();
+let mut tags = Memory::<u8, 512>::new();
+let mut map = Map::new(&mut slots, &mut tags);
 ```
 
-Creating a map marks every slot empty, so it is O(capacity). At most
-`u32::MAX` slots are used.
+From an arena: `Map::new(arena.alloc(512)?, arena.alloc(512)?)`.
 
-The map can be filled to 100%, but probes get longer as it fills, and a
-lookup for a key that is **not** in the map suffers most: at 90% full it is
-many times slower than at 50% (see [benchmarks](benchmarks.md)). Give the map
-about twice the number of entries you expect.
+The capacity is the length of the shorter block, and at most `u32::MAX`.
+Creating a map marks every slot empty, so it is O(capacity) (one byte per
+slot).
+
+The map can be filled to 100%. Finding keys that are in the map stays fast
+up to about 90% full. Looking up keys that are **not** in the map slows
+down past 3/4 full (see [benchmarks](benchmarks.md)); leave a quarter of
+the slots free when that is common.
+
+| Type | Memory |
+|---|---|
+| `Map<K, V, Inline<256>>` | both blocks inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
+| `Map<K, V, Borrowed<'a>>` | provided by the caller: pass two `&mut Memory<..>`, arena pieces or any `&mut [MaybeUninit<..>]` to `new` |
+| `Map<K, V, Dynamic<A>>` | taken from an allocator, grows; see below |
+
+Passing two `Memory` blocks to `new` by value also gives inline storage.
+Functions that should accept any kind are generic over
+`S: Storage<Slot<K, V>> + Storage<u8>`.
+
+The hasher parameter `H` comes after the storage:
+`Map<K, V, Borrowed<'a>, MyHasher>`.
 
 ## Hashing
 
@@ -48,50 +76,42 @@ for keys from untrusted input.
 Any `core::hash::BuildHasher` can be used instead:
 
 ```rust
-let mut map = Map::with_hasher(&mut memory, my_build_hasher);
+let mut map = Map::with_hasher(&mut slots, &mut tags, my_build_hasher);
 ```
+
+The upper 32 bits of the hash choose the slot and 7 of the lower bits make
+the tag, so a hasher should mix its input into both halves.
 
 ## API
 
 | Operation | Signature | Notes |
 |---|---|---|
-| create | `new(buffer)`, `with_hasher(buffer, H)`, `inline()`, `inline_with_hasher(H)` | O(capacity) |
+| create | `new(slots, tags)`, `with_hasher(slots, tags, H)`, `inline()`, `inline_with_hasher(H)` | O(capacity) |
 | sizes | `len`, `capacity`, `is_empty`, `is_full` | O(1) |
 | insert | `insert(K, V) -> Result<Option<V>, Full<(K, V)>>` | `Some(old)` when the key existed; returns both when full |
 | lookup | `get(&Q)`, `get_mut(&Q)`, `contains_key(&Q)` | `K: Borrow<Q>`, so `&str` works for `String` keys |
-| remove | `remove(&Q) -> Option<V>`, `remove_entry(&Q) -> Option<(K, V)>` | |
+| remove | `remove(&Q) -> Option<V>`, `remove_entry(&Q) -> Option<(K, V)>` | hashes the entries right after the removed one |
+| reserve | `reserve(additional) -> Result<(), Full<()>>` | grows dynamic storage; only checks fixed storage |
 | clear | `clear()` | drops all entries |
 | iterate | `iter`, `iter_mut`, `&map`, `&mut map` | `(&K, &V)` / `(&K, &mut V)`; cost is proportional to capacity |
 
 ## Guarantees
 
-- No allocation, no panics.
+- No allocation unless the storage is `Dynamic`, no panics.
 - A failed insert leaves the map unchanged and returns the key and value.
 - Entries still in the map are dropped when it is dropped.
-
-## Storage
-
-The parameter `S` says where the memory lives; see
-[storage](storage.md#storage-parameter).
-
-| Type | Memory |
-|---|---|
-| `Map<K, V, Inline<256>>` | inside the container: no lifetime, a plain struct field. Create with `inline()` or `default()`; `inline()` is `const` |
-| `Map<K, V, Borrowed<'a>>` | provided by the caller, sized in `Slot<K, V>`: pass `&mut Memory<..>`, an arena piece or any `&mut [MaybeUninit<..>]` to `new` |
-
-Passing a `Memory` to `new` by value also gives inline storage. Functions
-that should accept either kind are generic over `S`.
-
-The hasher parameter is now called `H` and comes after the storage:
-`Map<K, V, Borrowed<'a>, MyHasher>`.
 
 ## Growing
 
 With `Map<K, V, Dynamic<A>>` the map moves to bigger storage when it gets
-more than 3/4 full, so lookups stay fast without sizing it by hand. The
-stored hash bits place the entries in the new storage; no key is hashed
-again.
+more than 3/4 full, so lookups stay fast without sizing it by hand. Pass
+the allocator twice, once per block:
 
+```rust
+let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
+```
+
+- Every key is hashed again when the map moves.
 - `reserve(additional) -> Result<(), Full<()>>` makes room up front, at no
   more than 3/4 full.
 - `insert` reports `Full` only when the allocator refuses *and* every slot
@@ -101,11 +121,11 @@ again.
   entries that fit before the next growth.
 - `Map::<K, V, Dynamic<A>, H>::default()` when `A: Default` and
   `H: Default`.
-- Growing takes a new block and gives the old one back. In an `Arena` the
-  old block is left behind.
-- About 6 to 9 ns per insert of a new `u32` key while growing from empty
-  (a growing `std::HashMap` with the same hasher: about 10 ns at 2,000
-  keys and 8 ns at 50,000, where vas takes 18 to 26 ns). `reserve` first
-  to get the fixed-storage speed.
+- Growing takes two new blocks and gives the old ones back. In an `Arena`
+  the old blocks are left behind.
+- About 8 ns per insert of a new `u32` key while growing from empty to
+  2,000 keys and 16 ns to 50,000 (a growing `std::HashMap` with the same
+  hasher: 10 ns and 8 ns). `reserve` first to get the fixed-storage speed
+  of about 3 ns.
 
 See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).

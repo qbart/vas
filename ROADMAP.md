@@ -131,6 +131,15 @@
 - [x] `Default` for containers with `Dynamic<A>` storage when `A: Default`
 - [x] `Map` no longer walks its slots on drop when keys and values need no drop
 
+## 0.27.0 — denser map
+
+- [x] `Map` keeps one tag byte per slot in a block of its own and scans 8 slots at a time; `Slot<K, V>` is exactly a key and a value
+- [x] `Map::new(slots, tags)` takes two blocks (breaking); `Dynamic` is passed twice
+- [x] Level with `std::HashMap` (same hasher) on inserts at 50,000 keys, hits 1.5x slower, misses 1.5x faster; usable up to 90% full
+- [x] `Buffer::replace` can be cancelled by its `transfer` closure
+- [x] `cargo bench -- <text>` runs only the matching cases; the benchmark warms the CPU up first
+- [x] CI for Forgejo (`.forgejo/workflows/ci.yml`)
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -140,7 +149,6 @@
 
 ## Later
 
-- [ ] Denser hash map layout (separate metadata) to close the gap to std on large maps
 - [ ] Red-black tree
 - [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
 - [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
@@ -158,6 +166,7 @@
         `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
   - [x] Growing on the two-buffer containers (0.26.0): `Graph`,
         `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
-  - [ ] Growing `Map` is about 2x slower to fill than `std::HashMap` at
-        50,000 keys (faster at 2,000); goes with the denser layout above
+  - [ ] Growing `Map` is 2x slower to fill than `std::HashMap` at 50,000
+        keys (faster at 2,000): it grows at 3/4 full, std at 7/8, so it
+        ends up with twice the slots at that size
   - [ ] `Clone` for containers with inline storage

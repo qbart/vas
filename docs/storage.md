@@ -84,7 +84,7 @@ container's page has a "Growing" section with the details.
 | `Vector`, `Heap`, `OrderedMap` | the block is extended, in place when the allocator can |
 | `Deque` | the block is extended, then the ring is put back in order |
 | `Pool`, `Tree`, `BinaryTree`, `Graph` | the block is extended; handles and ids stay valid |
-| `Map` | moves to a new block when more than 3/4 full |
+| `Map` | moves to two new blocks (entries and tags) when more than 3/4 full |
 | `Bitset` | grows to hold the highest bit set |
 | `StaticGraph` | `build` takes exactly what the graph needs |
 | `SpatialGrid`, `Quadtree` / `Octree` | cells / nodes and entries grow as points are added |
@@ -117,7 +117,8 @@ The pieces live in `vas::storage`:
 - `Buffer<T>`: the slots themselves. An `unsafe` trait; containers rely on
   it returning the same slots every time, and on `grow(min)` keeping their
   contents. `replace(min, transfer)` switches to a new block and lets the
-  container move its contents across (used by `Map`). Fixed buffers answer
+  container move its contents across, or cancel by returning `false`
+  (used by `Map`, which switches two blocks together). Fixed buffers answer
   both with `false`; `GROWS` says at compile time whether a buffer can
   grow at all.
 - `IntoBuffer<T>`: what `new` accepts.

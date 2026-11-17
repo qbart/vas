@@ -28,7 +28,13 @@ fn block<T>(capacity: usize) -> Vec<MaybeUninit<T>> {
 }
 
 /// Runs `work` several times and prints the fastest run per operation.
+///
+/// `cargo bench -- map` only runs the cases whose name contains `map`.
 fn bench(group: &str, name: &str, operations: usize, mut work: impl FnMut() -> u64) {
+    let filter = std::env::args().skip(1).find(|arg| !arg.starts_with('-'));
+    if filter.is_some_and(|filter| !group.contains(&filter)) {
+        return;
+    }
     let mut best = f64::INFINITY;
     let mut check = 0;
     for _ in 0..RUNS {
@@ -140,12 +146,13 @@ fn map<const N: usize>() {
 
     // Half full, as recommended.
     let mut memory = block::<vas::map::Slot<u32, u32>>(2 * N);
+    let mut tags = block::<u8>(2 * N);
     bench(
         &format!("map {N} keys: insert"),
         "vas::Map (50% full)",
         N,
         || {
-            let mut map = Map::new(&mut memory[..]);
+            let mut map = Map::new(&mut memory[..], &mut tags[..]);
             for key in &input {
                 let _ = map.insert(*key, *key);
             }
@@ -205,7 +212,8 @@ fn map<const N: usize>() {
 
     let lookups = |name: &str, fill: usize| {
         let mut memory = block::<vas::map::Slot<u32, u32>>(fill);
-        let mut map = Map::new(&mut memory[..]);
+        let mut tags = block::<u8>(fill);
+        let mut map = Map::new(&mut memory[..], &mut tags[..]);
         for key in &input {
             let _ = map.insert(*key, *key);
         }
@@ -220,6 +228,7 @@ fn map<const N: usize>() {
         });
     };
     lookups("vas::Map (50% full)", 2 * N);
+    lookups("vas::Map (75% full)", N * 4 / 3);
     lookups("vas::Map (90% full)", N * 10 / 9);
 
     fn std_lookups<S: BuildHasher>(
@@ -263,12 +272,13 @@ fn map<const N: usize>() {
     );
 
     let mut memory = block::<vas::map::Slot<u32, u32>>(2 * N);
+    let mut tags = block::<u8>(2 * N);
     bench(
         &format!("map {N} keys: insert then remove"),
         "vas::Map (50% full)",
         2 * N,
         || {
-            let mut map = Map::new(&mut memory[..]);
+            let mut map = Map::new(&mut memory[..], &mut tags[..]);
             for key in &input {
                 let _ = map.insert(*key, *key);
             }
@@ -625,6 +635,12 @@ fn path() {
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
+    // Lets the CPU reach full speed before the first case is timed.
+    let start = Instant::now();
+    let mut spin = 0u64;
+    while start.elapsed().as_millis() < 300 {
+        spin = black_box(spin.wrapping_mul(31).wrapping_add(7));
+    }
     vector();
     deque();
     heap();

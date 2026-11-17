@@ -5,7 +5,8 @@ There are two sets: against the standard library (this section onwards) and
 
 ## Against the standard library
 
-Run with `make bench`. vas has no dependencies, so there is no benchmarking
+Run with `make bench` (`cargo bench --all-features -- map` runs only the
+cases whose name contains `map`). vas has no dependencies, so there is no benchmarking
 crate: `benches/bench.rs` is a small harness that runs each case 15 times
 and reports the fastest run, in nanoseconds per operation.
 
@@ -23,9 +24,9 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Deque` | `VecDeque` | slightly faster |
 | `Heap` | `BinaryHeap` | same speed |
 | `Pool` | `Vec<Option<Box<T>>>` | about 9x faster (no allocation per value) |
-| `Map`, 2k keys | `HashMap` with the same hasher | faster inserts, hits level, misses slower |
-| `Map`, 50k keys | `HashMap` with the same hasher | 1.5x to 3x slower |
-| `Map` | `HashMap` with its default hasher | faster inserts; hits level at 50k and faster at 2k; misses 2x slower at 50k |
+| `Map`, 2k keys | `HashMap` with the same hasher | inserts level, lookups 1.4x to 1.9x slower (under 1 ns) |
+| `Map`, 50k keys | `HashMap` with the same hasher | inserts level, hits 1.5x slower, misses 1.5x faster |
+| `Map` | `HashMap` with its default hasher | about 2x faster at everything |
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
 | `Bitset` | `Vec<bool>` | 2x slower per operation, 8x less memory |
@@ -35,21 +36,24 @@ Treat the numbers as a rough guide, not a precise measurement:
 
 ### What the numbers say
 
-**Map.** The hasher is not the weak point: `std`'s `HashMap` gets about
-twice as fast when given `FastHasher` instead of its default. The table
-layout is. `std`'s table keeps one byte of metadata per slot and scans it
-16 at a time; `vas::Map` stores a 4-byte tag next to every key and value
-and walks slot by slot. While the table fits in the CPU cache (2k keys) the
-two are level. Once it does not (50k keys, 1.2 MB at half fill), the bigger
-footprint costs 1.5x to 3x.
+**Map.** `vas::Map` keeps one byte per slot (a tag made of hash bits) in
+its own block and scans it 8 slots at a time; `std`'s `HashMap` does the
+same 16 at a time with SIMD. With the same hasher the two are close:
+inserts are level, and lookups differ by about 1 ns either way. Without
+`FastHasher`, `std` is about twice as slow, so the hasher matters more than
+the table.
 
-Fill level matters a lot for keys that are **not** in the map: at 90% full a
-miss takes about 4x (50k keys) to 15x (2k keys) as long as at 50%. Hits slow
-down about 2x. Keep the map at most half full if misses are common.
+Fill level matters for keys that are **not** in the map: at 75% full a miss
+costs up to 3x as much as at 50% (50k keys), at 90% up to 8x. Hits barely
+change up to 90%. Leave a quarter of the slots free if misses are common.
 
-Robin Hood probing was tried as a fix. It cut misses at 90% full from 40 ns
-to 16 ns, but made inserts about twice as slow and hits slightly slower at
-half fill, so it was not kept.
+Until 0.26 the map kept a 4-byte tag next to every key and value and
+walked slot by slot. At 50k keys that layout took 4.8 ns per insert, 4.7
+per hit and 10.5 per miss at 50% full, and 10 / 40 ns at 90% full; it was
+faster only on small, half-empty maps (1.7 ns per insert and 1.4 per hit
+at 2k keys). Removing is the one operation that got slower at 2k keys
+(2.5 to 3.6 ns), because the entries after the removed one are hashed
+again.
 
 **Heap.** The first version swapped elements pairwise and was about 50%
 slower than `BinaryHeap`. It now moves a gap through the heap, as `std`
@@ -81,35 +85,39 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | queue 100k push+pop | std VecDeque | 1.6 |
 | heap 50k push then pop | vas::Heap | 18.0 |
 | heap 50k push then pop | std BinaryHeap | 17.2 |
-| map 2000 keys: insert | vas::Map (50% full) | 1.7 |
-| map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 6.4 |
-| map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.2 |
-| map 2000 keys: insert | std HashMap (SipHash) | 5.7 |
-| map 2000 keys: insert | std HashMap + vas FastHasher | 2.8 |
-| map 2000 keys: hits | vas::Map (50% full) | 1.4 |
-| map 2000 keys: misses | vas::Map (50% full) | 1.6 |
-| map 2000 keys: hits | vas::Map (90% full) | 3.5 |
-| map 2000 keys: misses | vas::Map (90% full) | 24.9 |
+| map 2000 keys: insert | vas::Map (50% full) | 2.5 |
+| map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 8.1 |
+| map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.0 |
+| map 2000 keys: insert | std HashMap (SipHash) | 5.5 |
+| map 2000 keys: insert | std HashMap + vas FastHasher | 2.6 |
+| map 2000 keys: hits | vas::Map (50% full) | 1.9 |
+| map 2000 keys: misses | vas::Map (50% full) | 1.9 |
+| map 2000 keys: hits | vas::Map (75% full) | 2.0 |
+| map 2000 keys: misses | vas::Map (75% full) | 2.3 |
+| map 2000 keys: hits | vas::Map (90% full) | 2.3 |
+| map 2000 keys: misses | vas::Map (90% full) | 4.9 |
 | map 2000 keys: hits | std HashMap (SipHash) | 3.8 |
-| map 2000 keys: misses | std HashMap (SipHash) | 3.4 |
-| map 2000 keys: hits | std HashMap + vas FastHasher | 1.3 |
+| map 2000 keys: misses | std HashMap (SipHash) | 3.6 |
+| map 2000 keys: hits | std HashMap + vas FastHasher | 1.4 |
 | map 2000 keys: misses | std HashMap + vas FastHasher | 1.0 |
-| map 2000 keys: insert then remove | vas::Map (50% full) | 2.5 |
+| map 2000 keys: insert then remove | vas::Map (50% full) | 3.6 |
 | map 2000 keys: insert then remove | std HashMap + vas FastHasher | 2.8 |
-| map 50000 keys: insert | vas::Map (50% full) | 4.8 |
-| map 50000 keys: insert | vas::Map (growing, `Dynamic`) | 18.3 |
-| map 50000 keys: insert | std HashMap + vas FastHasher (growing) | 8.3 |
-| map 50000 keys: insert | std HashMap (SipHash) | 6.6 |
-| map 50000 keys: insert | std HashMap + vas FastHasher | 3.3 |
-| map 50000 keys: hits | vas::Map (50% full) | 4.7 |
-| map 50000 keys: misses | vas::Map (50% full) | 10.5 |
-| map 50000 keys: hits | vas::Map (90% full) | 10.0 |
-| map 50000 keys: misses | vas::Map (90% full) | 40.1 |
-| map 50000 keys: hits | std HashMap (SipHash) | 4.7 |
-| map 50000 keys: misses | std HashMap (SipHash) | 5.6 |
-| map 50000 keys: hits | std HashMap + vas FastHasher | 1.6 |
-| map 50000 keys: misses | std HashMap + vas FastHasher | 3.2 |
-| map 50000 keys: insert then remove | vas::Map (50% full) | 8.8 |
+| map 50000 keys: insert | vas::Map (50% full) | 2.9 |
+| map 50000 keys: insert | vas::Map (growing, `Dynamic`) | 16.3 |
+| map 50000 keys: insert | std HashMap + vas FastHasher (growing) | 8.1 |
+| map 50000 keys: insert | std HashMap (SipHash) | 6.2 |
+| map 50000 keys: insert | std HashMap + vas FastHasher | 3.0 |
+| map 50000 keys: hits | vas::Map (50% full) | 2.5 |
+| map 50000 keys: misses | vas::Map (50% full) | 2.2 |
+| map 50000 keys: hits | vas::Map (75% full) | 2.5 |
+| map 50000 keys: misses | vas::Map (75% full) | 6.9 |
+| map 50000 keys: hits | vas::Map (90% full) | 3.5 |
+| map 50000 keys: misses | vas::Map (90% full) | 17.6 |
+| map 50000 keys: hits | std HashMap (SipHash) | 4.9 |
+| map 50000 keys: misses | std HashMap (SipHash) | 5.5 |
+| map 50000 keys: hits | std HashMap + vas FastHasher | 1.7 |
+| map 50000 keys: misses | std HashMap + vas FastHasher | 3.3 |
+| map 50000 keys: insert then remove | vas::Map (50% full) | 8.4 |
 | map 50000 keys: insert then remove | std HashMap + vas FastHasher | 5.4 |
 | ordered 32: build | vas::OrderedMap | 10.6 |
 | ordered 32: build | std BTreeMap | 13.4 |
@@ -159,9 +167,9 @@ algorithms, so theirs differ).
 | `Vector` | `arrayvec`, `heapless` | same speed |
 | `Deque` | `heapless::Deque` | about 1.6x slower |
 | `Heap` | `heapless::BinaryHeap` | level to slightly slower (within run-to-run noise) |
-| `Map`, 2k keys | `hashbrown` | faster inserts, lookups level |
-| `Map`, 50k keys | `hashbrown` | inserts level, lookups about 2x slower |
-| `Map` | `heapless::FnvIndexMap` | 1.5x to 2x faster at 2k keys, 2x to 5x faster at 50k |
+| `Map`, 2k keys | `hashbrown` | inserts level, lookups 1.4x to 2x slower (under 1 ns) |
+| `Map`, 50k keys | `hashbrown` | inserts level, hits 1.7x slower, misses 1.6x faster |
+| `Map` | `heapless::FnvIndexMap` | level to 1.3x faster at 2k keys, 4x to 8x faster at 50k |
 | `Pool` | `slotmap`, `slab` | level with `slab`, slightly faster than `slotmap` |
 | `Bitset` | `fixedbitset` | same speed |
 | `Rng` | `fastrand` | slightly slower (0.5 vs 0.4 ns per `u64`; 0.9 vs 0.6 ns for a bounded value) |
@@ -172,8 +180,7 @@ algorithms, so theirs differ).
 Notes:
 
 - The map here has 131072 slots for 50k keys (38% full), where the std
-  comparison above uses 100k slots (50% full); that is why its numbers are
-  better in this table.
+  comparison above uses 100k slots (50% full).
 - `heapless::Deque` is the one clear loss. The likely cause is that vas
   checks bounds on every slot access where `heapless` does not; this has not
   been confirmed by profiling.
@@ -194,30 +201,30 @@ Notes:
 | queue 100k push+pop | heapless::Deque | 1.4 |
 | heap 50k push then pop | vas::Heap | 20.4 |
 | heap 50k push then pop | heapless::BinaryHeap | 17.0 |
-| map 2000 keys: insert | vas::Map | 1.7 |
-| map 2000 keys: hits | vas::Map | 1.4 |
-| map 2000 keys: misses | vas::Map | 1.4 |
-| map 2000 keys: insert | hashbrown::HashMap (default hasher) | 2.7 |
-| map 2000 keys: hits | hashbrown::HashMap (default hasher) | 1.5 |
-| map 2000 keys: misses | hashbrown::HashMap (default hasher) | 1.4 |
-| map 2000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.6 |
-| map 2000 keys: hits | hashbrown::HashMap + vas FastHasher | 1.5 |
+| map 2000 keys: insert | vas::Map | 2.5 |
+| map 2000 keys: hits | vas::Map | 1.9 |
+| map 2000 keys: misses | vas::Map | 1.9 |
+| map 2000 keys: insert | hashbrown::HashMap (default hasher) | 2.4 |
+| map 2000 keys: hits | hashbrown::HashMap (default hasher) | 1.3 |
+| map 2000 keys: misses | hashbrown::HashMap (default hasher) | 0.9 |
+| map 2000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.5 |
+| map 2000 keys: hits | hashbrown::HashMap + vas FastHasher | 1.4 |
 | map 2000 keys: misses | hashbrown::HashMap + vas FastHasher | 1.1 |
-| map 2000 keys: insert | heapless::FnvIndexMap | 2.9 |
-| map 2000 keys: hits | heapless::FnvIndexMap | 2.8 |
-| map 2000 keys: misses | heapless::FnvIndexMap | 2.1 |
-| map 50000 keys: insert | vas::Map | 3.3 |
-| map 50000 keys: hits | vas::Map | 3.2 |
-| map 50000 keys: misses | vas::Map | 7.3 |
-| map 50000 keys: insert | hashbrown::HashMap (default hasher) | 3.0 |
-| map 50000 keys: hits | hashbrown::HashMap (default hasher) | 1.7 |
-| map 50000 keys: misses | hashbrown::HashMap (default hasher) | 3.1 |
-| map 50000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.6 |
+| map 2000 keys: insert | heapless::FnvIndexMap | 2.6 |
+| map 2000 keys: hits | heapless::FnvIndexMap | 2.5 |
+| map 2000 keys: misses | heapless::FnvIndexMap | 1.9 |
+| map 50000 keys: insert | vas::Map | 2.9 |
+| map 50000 keys: hits | vas::Map | 2.9 |
+| map 50000 keys: misses | vas::Map | 2.0 |
+| map 50000 keys: insert | hashbrown::HashMap (default hasher) | 2.9 |
+| map 50000 keys: hits | hashbrown::HashMap (default hasher) | 1.6 |
+| map 50000 keys: misses | hashbrown::HashMap (default hasher) | 3.2 |
+| map 50000 keys: insert | hashbrown::HashMap + vas FastHasher | 2.7 |
 | map 50000 keys: hits | hashbrown::HashMap + vas FastHasher | 1.7 |
-| map 50000 keys: misses | hashbrown::HashMap + vas FastHasher | 3.1 |
-| map 50000 keys: insert | heapless::FnvIndexMap | 11.6 |
+| map 50000 keys: misses | hashbrown::HashMap + vas FastHasher | 3.2 |
+| map 50000 keys: insert | heapless::FnvIndexMap | 11.4 |
 | map 50000 keys: hits | heapless::FnvIndexMap | 15.3 |
-| map 50000 keys: misses | heapless::FnvIndexMap | 16.2 |
+| map 50000 keys: misses | heapless::FnvIndexMap | 16.1 |
 | pool 50k insert+get+remove | vas::Pool | 0.5 |
 | pool 50k insert+get+remove | slotmap::SlotMap | 0.7 |
 | pool 50k insert+get+remove | slab::Slab (no stale detection) | 0.5 |

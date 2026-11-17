@@ -132,7 +132,8 @@ fn borrowed_spelling_still_works() {
     assert!(pool.insert(1).is_ok());
 
     let mut memory = Memory::<vas::map::Slot<u8, u8>, 4>::new();
-    let mut map: Map<u8, u8, Borrowed<'_>> = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 4>::new();
+    let mut map: Map<u8, u8, Borrowed<'_>> = Map::new(&mut memory, &mut tags);
     assert!(map.insert(1, 1).is_ok());
 
     let mut memory = Memory::<u64, 1>::new();

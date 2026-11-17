@@ -56,7 +56,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Map: unordered key -> value.
     let mut memory = Memory::<vas::map::Slot<u32, &str>, 64>::new();
-    let mut items = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 64>::new();
+    let mut items = Map::new(&mut memory, &mut tags);
     items.insert(7, "sword")?;
     assert_eq!(items.get(&7), Some(&"sword"));
 

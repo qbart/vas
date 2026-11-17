@@ -94,7 +94,7 @@ fn pool_reserve() {
 fn map_grows_and_keeps_every_entry() {
     let mut block = Memory::<u8, 65536>::new();
     let arena = Arena::new(&mut block);
-    let mut map = Map::new(Dynamic(&arena));
+    let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
     assert_eq!((map.len(), map.capacity()), (0, 0));
     assert_eq!(map.get(&1), None);
     for key in 0..1000u32 {
@@ -119,7 +119,7 @@ fn map_grows_and_keeps_every_entry() {
 fn map_reports_full_when_the_allocator_refuses() {
     let mut block = Memory::<u8, 512>::new();
     let arena = Arena::new(&mut block);
-    let mut map = Map::new(Dynamic(&arena));
+    let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
     let mut stored = 0u32;
     let rejected = loop {
         match map.insert(stored, stored) {
@@ -144,7 +144,7 @@ fn map_reserve_and_drop() {
     let mut block = Memory::<u8, 16384>::new();
     let arena = Arena::new(&mut block);
     {
-        let mut map = Map::new(Dynamic(&arena));
+        let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
         assert_eq!(map.reserve(100), Ok(()));
         let capacity = map.capacity();
         assert!(capacity >= 100);

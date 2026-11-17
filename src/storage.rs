@@ -74,8 +74,10 @@ pub trait Storage<T> {
 /// - `replace(min, transfer)` either returns `false` without calling
 ///   `transfer` and without changing anything, or calls
 ///   `transfer(old, new)` exactly once, with all current slots as `old` and
-///   at least `min` other slots as `new`, and returns `true`; the buffer's
-///   slots are then exactly `new`, as `transfer` left them.
+///   at least `min` other slots as `new`. When `transfer` returns `true`
+///   so does `replace`, and the buffer's slots are then exactly `new`, as
+///   `transfer` left them. When `transfer` returns `false` so does
+///   `replace`, and the buffer still has its old slots, untouched.
 /// - The slots are not reachable in any other way while the buffer exists.
 pub unsafe trait Buffer<T> {
     /// All slots.
@@ -98,15 +100,16 @@ pub unsafe trait Buffer<T> {
     }
 
     /// Tries to switch to a different run of at least `min` slots. The
-    /// container moves its contents across in `transfer(old, new)`; the
-    /// old slots are then given up without being read again. Used by
+    /// container moves its contents across in `transfer(old, new)` and
+    /// returns `true`; the old slots are then given up without being read
+    /// again. Returning `false` instead cancels the switch. Used by
     /// containers whose layout depends on the capacity, such as hash maps.
     /// Buffers of a fixed size return `false`, which is the default.
     #[inline]
     fn replace(
         &mut self,
         min: usize,
-        transfer: impl FnOnce(&[MaybeUninit<T>], &mut [MaybeUninit<T>]),
+        transfer: impl FnOnce(&[MaybeUninit<T>], &mut [MaybeUninit<T>]) -> bool,
     ) -> bool {
         let _ = (min, transfer);
         false
@@ -376,7 +379,7 @@ unsafe impl<T, A: Allocator> Buffer<T> for Allocation<T, A> {
     fn replace(
         &mut self,
         min: usize,
-        transfer: impl FnOnce(&[MaybeUninit<T>], &mut [MaybeUninit<T>]),
+        transfer: impl FnOnce(&[MaybeUninit<T>], &mut [MaybeUninit<T>]) -> bool,
     ) -> bool {
         if size_of::<T>() == 0 {
             return false;
@@ -397,7 +400,15 @@ unsafe impl<T, A: Allocator> Buffer<T> for Allocation<T, A> {
         let new = unsafe { slice::from_raw_parts_mut(start.as_ptr(), len) };
         // Should `transfer` panic, the new block is leaked and the buffer
         // still holds the old one, untouched.
-        transfer(self.slots(), new);
+        if !transfer(self.slots(), new) {
+            // Cancelled: give the new block back and keep the old one.
+            drop(Allocation::<T, &A> {
+                start,
+                len,
+                allocator: &self.allocator,
+            });
+            return false;
+        }
         let old = Allocation::<T, &A> {
             start: core::mem::replace(&mut self.start, start),
             len: core::mem::replace(&mut self.len, len),

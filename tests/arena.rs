@@ -164,7 +164,9 @@ fn packs_a_struct_of_arrays_and_other_containers_in_one_block() {
 
     let particles = Particles::new(&arena, 100);
     let enemies = arena.alloc::<Slot<&str>>(16).map(Pool::new);
-    let names = arena.alloc::<vas::map::Slot<u32, &str>>(32).map(Map::new);
+    let names = arena
+        .alloc::<vas::map::Slot<u32, &str>>(32)
+        .and_then(|slots| Ok(Map::new(slots, arena.alloc(32)?)));
     assert!(particles.is_ok() && enemies.is_ok() && names.is_ok());
     if let (Ok(mut particles), Ok(mut enemies), Ok(mut names)) = (particles, enemies, names) {
         for i in 0..100 {

@@ -38,7 +38,8 @@ impl BuildHasher for Colliding {
 #[test]
 fn new_is_empty() {
     let mut memory = Memory::<Slot<u32, u32>, 8>::new();
-    let map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 8>::new();
+    let map = Map::new(&mut memory, &mut tags);
     assert_eq!(map.len(), 0);
     assert_eq!(map.capacity(), 8);
     assert!(map.is_empty());
@@ -50,7 +51,8 @@ fn new_is_empty() {
 #[test]
 fn insert_get_and_replace() {
     let mut memory = Memory::<Slot<u32, &str>, 8>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 8>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert_eq!(map.insert(1, "one"), Ok(None));
     assert_eq!(map.insert(2, "two"), Ok(None));
     assert_eq!(map.get(&1), Some(&"one"));
@@ -70,7 +72,8 @@ fn insert_get_and_replace() {
 #[test]
 fn insert_when_full_returns_pair() {
     let mut memory = Memory::<Slot<u32, u32>, 2>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 2>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert_eq!(map.insert(1, 10), Ok(None));
     assert_eq!(map.insert(2, 20), Ok(None));
     assert!(map.is_full());
@@ -86,7 +89,8 @@ fn insert_when_full_returns_pair() {
 #[test]
 fn zero_capacity() {
     let mut memory = Memory::<Slot<u32, u32>, 0>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 0>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert!(map.is_full());
     assert_eq!(map.insert(1, 1), Err(Full((1, 1))));
     assert_eq!(map.get(&1), None);
@@ -96,7 +100,8 @@ fn zero_capacity() {
 #[test]
 fn remove_returns_value_and_frees_room() {
     let mut memory = Memory::<Slot<u32, u32>, 2>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 2>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert_eq!(map.insert(1, 10), Ok(None));
     assert_eq!(map.insert(2, 20), Ok(None));
     assert_eq!(map.remove(&1), Some(10));
@@ -111,7 +116,8 @@ fn remove_returns_value_and_frees_room() {
 #[test]
 fn lookup_by_borrowed_key() {
     let mut memory = Memory::<Slot<String, u32>, 4>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 4>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert_eq!(map.insert(String::from("sword"), 7), Ok(None));
     assert_eq!(map.get("sword"), Some(&7));
     assert_eq!(map.get("shield"), None);
@@ -122,7 +128,8 @@ fn lookup_by_borrowed_key() {
 #[test]
 fn iterates_all_entries() {
     let mut memory = Memory::<Slot<u32, u32>, 16>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 16>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     for key in 0..10 {
         assert_eq!(map.insert(key, key * 2), Ok(None));
     }
@@ -146,8 +153,9 @@ fn iterates_all_entries() {
 fn drops_keys_and_values() {
     let drops = Cell::new(0);
     let mut memory = Memory::<Slot<u32, Counted>, 4>::new();
+    let mut tags = Memory::<u8, 4>::new();
     {
-        let mut map = Map::new(&mut memory);
+        let mut map = Map::new(&mut memory, &mut tags);
         assert!(map.insert(1, Counted(&drops)).is_ok());
         assert!(map.insert(2, Counted(&drops)).is_ok());
         assert!(map.insert(3, Counted(&drops)).is_ok());
@@ -164,7 +172,8 @@ fn drops_keys_and_values() {
 fn clear_empties_and_allows_reuse() {
     let drops = Cell::new(0);
     let mut memory = Memory::<Slot<u32, Counted>, 2>::new();
-    let mut map = Map::new(&mut memory);
+    let mut tags = Memory::<u8, 2>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
     assert!(map.insert(1, Counted(&drops)).is_ok());
     assert!(map.insert(2, Counted(&drops)).is_ok());
     map.clear();
@@ -177,8 +186,10 @@ fn clear_empties_and_allows_reuse() {
 }
 
 /// Runs a pseudo-random mix of operations against std's HashMap.
-fn check_against_std<S: BuildHasher>(hasher: S, capacity_is_32: &mut Memory<Slot<u16, u32>, 32>) {
-    let mut map = Map::with_hasher(capacity_is_32, hasher);
+fn check_against_std<S: BuildHasher>(hasher: S) {
+    let mut memory = Memory::<Slot<u16, u32>, 32>::new();
+    let mut tags = Memory::<u8, 32>::new();
+    let mut map = Map::with_hasher(&mut memory, &mut tags, hasher);
     let mut model: HashMap<u16, u32> = HashMap::new();
     let mut seed: u32 = 0x1234_5678;
     let steps: u32 = if cfg!(miri) { 400 } else { 3000 };
@@ -206,20 +217,17 @@ fn check_against_std<S: BuildHasher>(hasher: S, capacity_is_32: &mut Memory<Slot
 
 #[test]
 fn matches_std_with_default_hasher() {
-    let mut memory = Memory::new();
-    check_against_std(FastState::default(), &mut memory);
+    check_against_std(FastState::default());
 }
 
 #[test]
 fn matches_std_when_every_key_collides() {
-    let mut memory = Memory::new();
-    check_against_std(Colliding, &mut memory);
+    check_against_std(Colliding);
 }
 
 #[test]
 fn matches_std_with_std_hasher() {
-    let mut memory = Memory::new();
-    check_against_std(RandomState::new(), &mut memory);
+    check_against_std(RandomState::new());
 }
 
 #[test]
@@ -235,4 +243,109 @@ fn fast_hasher_is_deterministic_and_spreads() {
     a.write(b"hello world, hello");
     b.write(b"hello world, hello");
     assert_eq!(a.finish(), b.finish());
+}
+
+#[test]
+fn capacity_is_the_shorter_block() {
+    let mut memory = Memory::<Slot<u32, u32>, 8>::new();
+    let mut tags = Memory::<u8, 5>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
+    assert_eq!(map.capacity(), 5);
+    for key in 0..5 {
+        assert_eq!(map.insert(key, key), Ok(None));
+    }
+    assert_eq!(map.insert(5, 5), Err(Full((5, 5))));
+}
+
+/// Fills maps of every small capacity completely, so that probing wraps
+/// around the end in every possible way, then empties them again.
+#[test]
+fn every_small_capacity_fills_up_and_empties() {
+    let mut memory = Memory::<Slot<u32, u32>, 40>::new();
+    let mut tags = Memory::<u8, 40>::new();
+    for capacity in 0..=40usize {
+        let mut map = Map::new(&mut memory[..capacity], &mut tags[..capacity]);
+        assert_eq!(map.capacity(), capacity);
+        for key in 0..capacity as u32 {
+            assert_eq!(map.insert(key * 7, key), Ok(None));
+            assert_eq!(map.get(&(key * 7)), Some(&key));
+        }
+        assert!(map.is_full());
+        assert_eq!(map.insert(1_000_000, 0), Err(Full((1_000_000, 0))));
+        assert_eq!(map.get(&1_000_000), None);
+        for key in 0..capacity as u32 {
+            assert_eq!(map.get(&(key * 7)), Some(&key));
+        }
+        // Remove in an order unrelated to insertion and check the rest
+        // stays reachable after every removal.
+        for step in 0..capacity as u32 {
+            let key = (step * 3) % capacity as u32;
+            if map.remove(&(key * 7)).is_some() {
+                assert_eq!(map.get(&(key * 7)), None);
+            }
+            assert_eq!(
+                map.iter().filter(|(k, v)| map.get(k) == Some(v)).count(),
+                map.len()
+            );
+        }
+    }
+}
+
+#[test]
+fn colliding_keys_fill_a_map_past_one_group() {
+    let mut memory = Memory::<Slot<u32, u32>, 21>::new();
+    let mut tags = Memory::<u8, 21>::new();
+    let mut map = Map::with_hasher(&mut memory, &mut tags, Colliding);
+    for key in 0..21 {
+        assert_eq!(map.insert(key, key + 100), Ok(None));
+    }
+    assert_eq!(map.insert(21, 0), Err(Full((21, 0))));
+    for key in 0..21 {
+        assert_eq!(map.get(&key), Some(&(key + 100)));
+    }
+    assert_eq!(map.get(&21), None);
+    assert_eq!(map.remove(&0), Some(100));
+    assert_eq!(map.remove(&10), Some(110));
+    for key in (1..21).filter(|key| *key != 10) {
+        assert_eq!(map.get(&key), Some(&(key + 100)));
+    }
+    assert_eq!(map.len(), 19);
+}
+
+#[test]
+fn nearly_full_map_still_finds_everything() {
+    let mut memory = Memory::<Slot<u32, u32>, 1024>::new();
+    let mut tags = Memory::<u8, 1024>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
+    for key in 0..1000u32 {
+        assert_eq!(map.insert(key.wrapping_mul(2_654_435_761), key), Ok(None));
+    }
+    for key in 0..1000u32 {
+        assert_eq!(map.get(&key.wrapping_mul(2_654_435_761)), Some(&key));
+    }
+    assert_eq!(
+        (1000..3000u32)
+            .filter(|key| map.contains_key(&key.wrapping_mul(2_654_435_761)))
+            .count(),
+        0
+    );
+    for key in (0..1000u32).step_by(3) {
+        assert_eq!(map.remove(&key.wrapping_mul(2_654_435_761)), Some(key));
+    }
+    for key in 0..1000u32 {
+        let expected = (key % 3 != 0).then_some(key);
+        assert_eq!(map.get(&key.wrapping_mul(2_654_435_761)).copied(), expected);
+    }
+}
+
+#[test]
+fn entries_without_size() {
+    let mut memory = Memory::<Slot<(), ()>, 4>::new();
+    let mut tags = Memory::<u8, 4>::new();
+    let mut map = Map::new(&mut memory, &mut tags);
+    assert_eq!(map.insert((), ()), Ok(None));
+    assert_eq!(map.insert((), ()), Ok(Some(())));
+    assert_eq!(map.len(), 1);
+    assert_eq!(map.remove(&()), Some(()));
+    assert!(map.is_empty());
 }

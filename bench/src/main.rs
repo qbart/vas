@@ -134,14 +134,15 @@ fn map<const N: usize, const SLOTS: usize>() {
     let miss = format!("map {N} keys: misses");
 
     let mut memory = block::<vas::map::Slot<u32, u32>>(SLOTS);
+    let mut tags = block::<u8>(SLOTS);
     bench(&insert, "vas::Map", N, || {
-        let mut map = Map::new(&mut memory[..]);
+        let mut map = Map::new(&mut memory[..], &mut tags[..]);
         for key in &input {
             let _ = map.insert(*key, *key);
         }
         map.len() as u64
     });
-    let mut map = Map::new(&mut memory[..]);
+    let mut map = Map::new(&mut memory[..], &mut tags[..]);
     for key in &input {
         let _ = map.insert(*key, *key);
     }

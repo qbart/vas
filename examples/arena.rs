@@ -40,7 +40,7 @@ impl World {
         Ok(Self {
             particles: Particles::new(arena, 100_000)?,
             enemies: Pool::new(arena.alloc::<Slot<&str>>(1024)?),
-            item_names: Map::new(arena.alloc(4096)?),
+            item_names: Map::new(arena.alloc(4096)?, arena.alloc(4096)?),
             score: arena.alloc_value(0).map_err(|_| "no room for the score")?,
         })
     }
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut frame_memory = Memory::<u8, { KB(64) }>::new();
         let frame = Arena::new(&mut frame_memory);
         let mut visible = Vector::new(Dynamic(&frame));
-        let mut layer_of = Map::new(Dynamic(&frame));
+        let mut layer_of = Map::new(Dynamic(&frame), Dynamic(&frame));
         for id in 0..1000u32 {
             visible.push(id)?;
             layer_of.insert(id, id % 8)?;
