@@ -18,3 +18,4 @@ vas is a collection of data containers, structures and algorithms for game devel
 10. No dependencies should be used. The only exception is `bench/`: a separate, never-published crate that compares vas against other crates. vas itself must stay dependency free.
 11. The crate must be `no_std` — this is the main goal.
 12. Allocation must be controlled by the library user — the library never allocates on its own.
+13. Keep the complexity table in README.md up to date: when a data structure or algorithm is added or changed, update its row (O notation for insert, remove, lookup and iteration, plus short use cases).
