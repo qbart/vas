@@ -136,7 +136,7 @@
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
 - [x] Benchmarks against other crates (`make bench-crates`, unpublished `bench/` crate)
 - [x] Usage examples, compiled and run by `make check` (`examples/`)
-- [x] CI: `make check` and Miri on every push (`.github/workflows/ci.yml`)
+- [x] CI: `make check` and Miri on every push (`.github/workflows/ci.yml`, `.forgejo/workflows/ci.yml`)
 
 ## Later
 

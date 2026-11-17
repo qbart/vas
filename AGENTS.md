@@ -5,7 +5,7 @@ vas is a collection of data containers, structures and algorithms for game devel
 ## Rules
 
 1. Use short commit names and follow semantic commits. Do not add co-author comments. Always work on master branch.
-2. First commit and push, then run verifications and tests.
+2. Run verifications and tests first, then commit and push. Every commit must build and pass on its own.
 3. Make sure to maintain spec for features in docs/*.md
 4. Do not use .unwrap / .expect / panic!. Runtime exceptions are not allowed. Lints in Cargo.toml enforce this.
 5. Maintain ROADMAP.md that keeps the progress about whole project.
