@@ -35,7 +35,8 @@ feature `Pool<T, Dynamic>` grows on the heap.
 - `Vector`: contiguous vector
 - `Pool`: store with generational handles
 - `Map`: unordered map
-- `OrderedMap`: map sorted by key
+- `OrderedMap`: map sorted by key (sorted block; small or mostly read)
+- `TreeMap`: map sorted by key (red-black tree; large and changing)
 - `Deque`: double-ended queue (ring buffer)
 - `Heap`: priority queue
 - `Bitset`: set of bits

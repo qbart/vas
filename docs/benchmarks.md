@@ -29,6 +29,10 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Map` | `HashMap` with its default hasher | about 2x faster at everything |
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
+| `TreeMap` inserts and removes | `BTreeMap` | level to 1.2x slower |
+| `TreeMap` lookups | `BTreeMap` | 1.6x slower at 1k, 1.5x faster at 16k |
+| `TreeMap` iteration | `BTreeMap` | 3x to 5x slower (2.5 to 4.4 ns per entry) |
+| `TreeMap` remove+insert, 16k | `OrderedMap` | 6x faster |
 | `Bitset` | `Vec<bool>` | 2x slower per operation, 8x less memory |
 | `SpatialGrid` radius query | brute force | about 50x faster |
 | `Quadtree` radius query | brute force | about 13x faster |
@@ -120,17 +124,41 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | map 50000 keys: insert then remove | vas::Map (50% full) | 8.4 |
 | map 50000 keys: insert then remove | std HashMap + vas FastHasher | 5.4 |
 | ordered 32: build | vas::OrderedMap | 10.6 |
-| ordered 32: build | std BTreeMap | 13.4 |
-| ordered 32: lookups | vas::OrderedMap | 2.5 |
+| ordered 32: build | vas::TreeMap | 8.4 |
+| ordered 32: build | std BTreeMap | 13.5 |
+| ordered 32: lookups | vas::OrderedMap | 2.8 |
+| ordered 32: lookups | vas::TreeMap | 2.5 |
 | ordered 32: lookups | std BTreeMap | 2.5 |
-| ordered 1024: build | vas::OrderedMap | 26.6 |
-| ordered 1024: build | std BTreeMap | 14.0 |
-| ordered 1024: lookups | vas::OrderedMap | 5.6 |
-| ordered 1024: lookups | std BTreeMap | 5.3 |
-| ordered 16384: build | vas::OrderedMap | 218.6 |
-| ordered 16384: build | std BTreeMap | 51.5 |
+| ordered 32: remove+insert | vas::OrderedMap | 12.1 |
+| ordered 32: remove+insert | vas::TreeMap | 11.6 |
+| ordered 32: remove+insert | std BTreeMap | 9.8 |
+| ordered 32: iterate | vas::OrderedMap | 0.6 |
+| ordered 32: iterate | vas::TreeMap | 2.5 |
+| ordered 32: iterate | std BTreeMap | 0.9 |
+| ordered 1024: build | vas::OrderedMap | 26.5 |
+| ordered 1024: build | vas::TreeMap | 16.8 |
+| ordered 1024: build | std BTreeMap | 14.1 |
+| ordered 1024: lookups | vas::OrderedMap | 5.7 |
+| ordered 1024: lookups | vas::TreeMap | 7.2 |
+| ordered 1024: lookups | std BTreeMap | 4.5 |
+| ordered 1024: remove+insert | vas::OrderedMap | 38.8 |
+| ordered 1024: remove+insert | vas::TreeMap | 42.5 |
+| ordered 1024: remove+insert | std BTreeMap | 40.5 |
+| ordered 1024: iterate | vas::OrderedMap | 0.1 |
+| ordered 1024: iterate | vas::TreeMap | 2.6 |
+| ordered 1024: iterate | std BTreeMap | 0.5 |
+| ordered 16384: build | vas::OrderedMap | 218.5 |
+| ordered 16384: build | vas::TreeMap | 55.2 |
+| ordered 16384: build | std BTreeMap | 51.8 |
 | ordered 16384: lookups | vas::OrderedMap | 12.3 |
-| ordered 16384: lookups | std BTreeMap | 40.6 |
+| ordered 16384: lookups | vas::TreeMap | 27.4 |
+| ordered 16384: lookups | std BTreeMap | 41.7 |
+| ordered 16384: remove+insert | vas::OrderedMap | 420.1 |
+| ordered 16384: remove+insert | vas::TreeMap | 65.9 |
+| ordered 16384: remove+insert | std BTreeMap | 56.7 |
+| ordered 16384: iterate | vas::OrderedMap | 0.1 |
+| ordered 16384: iterate | vas::TreeMap | 4.4 |
+| ordered 16384: iterate | std BTreeMap | 0.8 |
 | pool 50k insert+get+remove | vas::Pool | 0.5 |
 | pool 50k insert+get+remove | std Vec<Option<Box<u64>>> | 4.4 |
 | bitset 100k insert+test | vas::Bitset | 0.4 |

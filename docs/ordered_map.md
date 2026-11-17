@@ -18,8 +18,8 @@ A sorted `Vector` of `(K, V)` pairs: one contiguous block, no links.
 | iterate | O(n), in key order, cache-friendly |
 
 This beats a tree for small to medium maps and for maps that are read much
-more than they change. For large maps with frequent inserts and removes a
-balanced tree is the better structure (planned: red-black tree).
+more than they change. For large maps with frequent inserts and removes use
+[`TreeMap`](tree_map.md), a red-black tree with the same API.
 
 ## Storage
 

@@ -28,6 +28,7 @@ pub mod spatial_grid;
 pub mod static_graph;
 pub mod storage;
 pub mod tree;
+pub mod tree_map;
 pub mod vector;
 
 pub use aabb::Aabb;
@@ -57,4 +58,5 @@ pub use spatial_grid::SpatialGrid;
 pub use static_graph::StaticGraph;
 pub use storage::{Borrowed, Dynamic, Inline};
 pub use tree::Tree;
+pub use tree_map::TreeMap;
 pub use vector::Vector;

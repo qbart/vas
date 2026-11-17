@@ -14,7 +14,7 @@ use vas::hash::FastState;
 use vas::path::Space;
 use vas::{
     Aabb, Bitset, Deque, Heap, KdTree, Map, OrderedMap, PathFinder, Pool, Quadtree, Rng,
-    SpatialGrid, Vector,
+    SpatialGrid, TreeMap, Vector,
 };
 
 const RUNS: usize = 15;
@@ -311,6 +311,14 @@ fn ordered_map() {
             }
             map.len() as u64
         });
+        let mut tree_memory = block::<vas::tree_map::Node<u32, u32>>(size);
+        bench(&group, "vas::TreeMap", size, || {
+            let mut map = TreeMap::new(&mut tree_memory[..]);
+            for key in &input {
+                let _ = map.insert(*key, *key);
+            }
+            map.len() as u64
+        });
         bench(&group, "std BTreeMap", size, || {
             let mut map = BTreeMap::new();
             for key in &input {
@@ -321,9 +329,11 @@ fn ordered_map() {
 
         let group = format!("ordered {size}: lookups");
         let mut map = OrderedMap::new(&mut memory[..]);
+        let mut tree = TreeMap::new(&mut tree_memory[..]);
         let mut std_map = BTreeMap::new();
         for key in &input {
             let _ = map.insert(*key, *key);
+            let _ = tree.insert(*key, *key);
             std_map.insert(*key, *key);
         }
         bench(&group, "vas::OrderedMap", size, || {
@@ -332,11 +342,73 @@ fn ordered_map() {
                 .filter_map(|key| map.get(key))
                 .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
         });
+        bench(&group, "vas::TreeMap", size, || {
+            input
+                .iter()
+                .filter_map(|key| tree.get(key))
+                .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        });
         bench(&group, "std BTreeMap", size, || {
             input
                 .iter()
                 .filter_map(|key| std_map.get(key))
                 .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        });
+
+        // A full map that keeps changing: every key is taken out and a
+        // new one put in.
+        let group = format!("ordered {size}: remove+insert");
+        let fresh = keys(size, 5);
+        bench(&group, "vas::OrderedMap", 4 * size, || {
+            let mut sum = 0u64;
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += map.remove(old).unwrap_or(0) as u64;
+                let _ = map.insert(*new, *new);
+            }
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += map.remove(new).unwrap_or(0) as u64;
+                let _ = map.insert(*old, *old);
+            }
+            sum / 2
+        });
+        bench(&group, "vas::TreeMap", 4 * size, || {
+            let mut sum = 0u64;
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += tree.remove(old).unwrap_or(0) as u64;
+                let _ = tree.insert(*new, *new);
+            }
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += tree.remove(new).unwrap_or(0) as u64;
+                let _ = tree.insert(*old, *old);
+            }
+            sum / 2
+        });
+        bench(&group, "std BTreeMap", 4 * size, || {
+            let mut sum = 0u64;
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += std_map.remove(old).unwrap_or(0) as u64;
+                std_map.insert(*new, *new);
+            }
+            for (old, new) in input.iter().zip(&fresh) {
+                sum += std_map.remove(new).unwrap_or(0) as u64;
+                std_map.insert(*old, *old);
+            }
+            sum / 2
+        });
+
+        let group = format!("ordered {size}: iterate");
+        bench(&group, "vas::OrderedMap", size, || {
+            map.iter()
+                .fold(0u64, |sum, (_, v)| sum.wrapping_add(*v as u64))
+        });
+        bench(&group, "vas::TreeMap", size, || {
+            tree.iter()
+                .fold(0u64, |sum, (_, v)| sum.wrapping_add(*v as u64))
+        });
+        bench(&group, "std BTreeMap", size, || {
+            std_map
+                .iter()
+                .fold(0u64, |sum, (_, v)| sum.wrapping_add(*v as u64))
         });
     }
 }

@@ -145,6 +145,14 @@
 - [x] `Clone` for every container with inline storage: `Vector`, `Deque`, `Pool`, `Map`, `Bitset`, `Heap`, `OrderedMap`, `Tree`, `BinaryTree`, `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
 - [x] Handles and ids of the original work on the copy
 
+## 0.29.0 — tree map
+
+- [x] `TreeMap`: ordered map as a red-black tree, O(log n) insert and remove, with the API of `OrderedMap` (nearest key, ranges, double-ended iteration)
+- [x] Nodes stay packed (a removed slot is filled by the last node); no free list
+- [x] All three storage kinds, `Clone` with inline storage
+- [x] Level to 1.2x slower than `std::BTreeMap` on inserts and removes, 1.5x faster on lookups at 16k entries
+- [x] `make bench` measures remove+insert and iteration for the ordered maps
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -155,7 +163,6 @@
 
 ## Later
 
-- [ ] Red-black tree
 - [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)

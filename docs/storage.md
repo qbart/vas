@@ -23,7 +23,8 @@ heap, arena, a mapped GPU buffer, ...), or on memory it takes from an
 
 Containers take a parameter `S` that says where their memory lives:
 `Vector<T, S>`, `Pool<T, S>`, `Map<K, V, S>`, `Deque<T, S>`, `Heap<T, S>`,
-`OrderedMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`, `BinaryTree<T, S>`.
+`OrderedMap<K, V, S>`, `TreeMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`,
+`BinaryTree<T, S>`.
 
 Containers with two blocks of memory take two parameters, the second
 defaulting to the first: `Graph<N, E, SN, SE>`, `StaticGraph<E, SO, SE>`,
@@ -81,7 +82,7 @@ container's page has a "Growing" section with the details.
 
 | Container | How it grows |
 |---|---|
-| `Vector`, `Heap`, `OrderedMap` | the block is extended, in place when the allocator can |
+| `Vector`, `Heap`, `OrderedMap`, `TreeMap` | the block is extended, in place when the allocator can |
 | `Deque` | the block is extended, then the ring is put back in order |
 | `Pool`, `Tree`, `BinaryTree`, `Graph` | the block is extended; handles and ids stay valid |
 | `Map` | moves to two new blocks (entries and tags) when more than 3/4 full |
@@ -91,7 +92,7 @@ container's page has a "Growing" section with the details.
 | `PathFinder` | node memory grows to the highest node touched; the open list never fills |
 
 `reserve` makes room up front on `Vector`, `Pool`, `Map`, `Deque`, `Heap`,
-`OrderedMap` and `PathFinder`. On fixed storage it only checks.
+`OrderedMap`, `TreeMap` and `PathFinder`. On fixed storage it only checks.
 
 A struct can own all of its containers without sizing any of them (here
 with the `alloc` feature and the global allocator):
