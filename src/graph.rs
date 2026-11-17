@@ -13,6 +13,7 @@ const NONE: u32 = u32::MAX;
 
 /// A node value together with its links. Opaque; it appears in the types
 /// [`NodeSlot`] and [`NodeId`].
+#[derive(Clone)]
 pub struct Node<N> {
     value: N,
     // Heads of the lists of edges leaving and entering this node.
@@ -22,6 +23,7 @@ pub struct Node<N> {
 
 /// An edge value together with its links. Opaque; it appears in the types
 /// [`EdgeSlot`] and [`EdgeId`].
+#[derive(Clone)]
 pub struct Edge<E> {
     value: E,
     // Slot indices of the two end nodes.
@@ -143,6 +145,19 @@ impl<N, E, const NODES: usize, const EDGES: usize> Default
     #[inline]
     fn default() -> Self {
         Self::inline()
+    }
+}
+
+/// Node and edge ids of the original refer to the same nodes and edges in
+/// the copy. Only graphs with inline storage can be cloned.
+impl<N: Clone, E: Clone, const NODES: usize, const EDGES: usize> Clone
+    for Graph<N, E, Inline<NODES>, Inline<EDGES>>
+{
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            edges: self.edges.clone(),
+        }
     }
 }
 

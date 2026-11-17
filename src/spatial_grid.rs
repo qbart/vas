@@ -5,7 +5,7 @@ use core::fmt;
 
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
-use crate::storage::{IntoBuffer, Storage};
+use crate::storage::{Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// "No entry" in a link.
@@ -13,6 +13,7 @@ const NONE: u32 = u32::MAX;
 
 /// A value in a [`SpatialGrid`] together with its position and links.
 /// Opaque; it appears in the types [`Slot`] and [`EntryId`].
+#[derive(Clone)]
 pub struct Entry<T, const D: usize> {
     value: T,
     position: [f32; D],
@@ -92,6 +93,22 @@ pub struct SpatialGrid<T, const D: usize, SC: Storage<u32>, SE: Storage<Slot<T, 
     counts: [u32; D],
     // Cells per world unit along each axis.
     scale: [f32; D],
+}
+
+/// Entry ids of the original refer to the same entries in the copy. Only
+/// grids with inline storage can be cloned.
+impl<T: Clone, const D: usize, const CELLS: usize, const ENTRIES: usize> Clone
+    for SpatialGrid<T, D, Inline<CELLS>, Inline<ENTRIES>>
+{
+    fn clone(&self) -> Self {
+        Self {
+            cells: self.cells.clone(),
+            entries: self.entries.clone(),
+            bounds: self.bounds,
+            counts: self.counts,
+            scale: self.scale,
+        }
+    }
 }
 
 impl<T, const D: usize, SC: Storage<u32>, SE: Storage<Slot<T, D>>> SpatialGrid<T, D, SC, SE> {

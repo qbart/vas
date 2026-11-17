@@ -145,6 +145,16 @@ impl<T, O: Default, const N: usize> Default for Heap<T, Inline<N>, O> {
     }
 }
 
+/// Only heaps with inline storage can be cloned.
+impl<T: Clone, O: Clone, const N: usize> Clone for Heap<T, Inline<N>, O> {
+    fn clone(&self) -> Self {
+        Self {
+            items: self.items.clone(),
+            order: self.order.clone(),
+        }
+    }
+}
+
 impl<T, A: Allocator + Default, O: Default> Default for Heap<T, Dynamic<A>, O> {
     /// Creates an empty heap that grows through `A::default()`.
     #[inline]

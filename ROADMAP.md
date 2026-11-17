@@ -140,6 +140,11 @@
 - [x] `cargo bench -- <text>` runs only the matching cases; the benchmark warms the CPU up first
 - [x] CI for Forgejo (`.forgejo/workflows/ci.yml`)
 
+## 0.28.0 — clone
+
+- [x] `Clone` for every container with inline storage: `Vector`, `Deque`, `Pool`, `Map`, `Bitset`, `Heap`, `OrderedMap`, `Tree`, `BinaryTree`, `Graph`, `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
+- [x] Handles and ids of the original work on the copy
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -169,4 +174,3 @@
   - [ ] Growing `Map` is 2x slower to fill than `std::HashMap` at 50,000
         keys (faster at 2,000): it grows at 3/4 full, std at 7/8, so it
         ends up with twice the slots at that size
-  - [ ] `Clone` for containers with inline storage

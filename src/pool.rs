@@ -161,6 +161,35 @@ impl<T, const N: usize> Default for Pool<T, Inline<N>> {
     }
 }
 
+/// Clones the values into a pool of the same capacity. Every value keeps
+/// its slot and generation, so handles of the original refer to the same
+/// values in the copy, and stale handles stay stale. Only pools with inline
+/// storage can be cloned.
+impl<T: Clone, const N: usize> Clone for Pool<T, Inline<N>> {
+    fn clone(&self) -> Self {
+        let mut copy = Self::inline();
+        for (raw, slot) in copy.buffer.iter_mut().zip(self.slots()) {
+            let value = if slot.is_occupied() {
+                // SAFETY: an occupied slot holds an initialised value.
+                MaybeUninit::new(unsafe { slot.value.assume_init_ref() }.clone())
+            } else {
+                MaybeUninit::uninit()
+            };
+            raw.write(Slot {
+                generation: slot.generation,
+                next_free: slot.next_free,
+                value,
+            });
+            // Counted one by one, so a panicking `clone` leaks nothing.
+            copy.initialized += 1;
+            copy.len += u32::from(slot.is_occupied());
+        }
+        // The free list only links slots that were all copied above.
+        copy.free_head = self.free_head;
+        copy
+    }
+}
+
 impl<T, A: Allocator + Default> Default for Pool<T, Dynamic<A>> {
     /// Creates an empty pool that grows through `A::default()`.
     #[inline]

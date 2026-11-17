@@ -64,6 +64,17 @@ impl<const N: usize> Default for Bitset<Inline<N>> {
     }
 }
 
+/// Only bitsets with inline storage can be cloned.
+impl<const N: usize> Clone for Bitset<Inline<N>> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            buffer: self.buffer,
+            used: self.used,
+        }
+    }
+}
+
 impl<A: Allocator + Default> Default for Bitset<Dynamic<A>> {
     /// Creates an empty set that grows through `A::default()`.
     #[inline]

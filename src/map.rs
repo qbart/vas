@@ -212,6 +212,36 @@ impl<K, V, H, const N: usize> Map<K, V, Inline<N>, H> {
     }
 }
 
+/// Clones the entries and the hasher into a map of the same capacity. Only
+/// maps with inline storage can be cloned.
+impl<K: Clone, V: Clone, H: Clone, const N: usize> Clone for Map<K, V, Inline<N>, H> {
+    fn clone(&self) -> Self {
+        let mut copy = Self::inline_with_hasher(self.hasher.clone());
+        // Same capacity and same hasher: every entry keeps its slot.
+        let tags = live(&self.tags, self.used);
+        for (((tag, slot), new_tag), new_slot) in tags
+            .iter()
+            .zip(&self.slots)
+            .zip(&mut copy.tags)
+            .zip(&mut copy.slots)
+        {
+            if *tag == EMPTY {
+                continue;
+            }
+            // SAFETY: a slot whose tag is not `EMPTY` is initialised.
+            let slot = unsafe { slot.assume_init_ref() };
+            new_slot.write(Slot {
+                key: slot.key.clone(),
+                value: slot.value.clone(),
+            });
+            // Marked one by one, so a panicking `clone` leaks nothing.
+            new_tag.write(*tag);
+            copy.len += 1;
+        }
+        copy
+    }
+}
+
 impl<K, V, H: Default, const N: usize> Default for Map<K, V, Inline<N>, H> {
     #[inline]
     fn default() -> Self {

@@ -59,6 +59,15 @@ impl<K, V, const N: usize> Default for OrderedMap<K, V, Inline<N>> {
     }
 }
 
+/// Only maps with inline storage can be cloned.
+impl<K: Clone, V: Clone, const N: usize> Clone for OrderedMap<K, V, Inline<N>> {
+    fn clone(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+        }
+    }
+}
+
 impl<K, V, A: Allocator + Default> Default for OrderedMap<K, V, Dynamic<A>> {
     /// Creates an empty map that grows through `A::default()`.
     #[inline]

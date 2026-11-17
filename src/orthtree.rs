@@ -4,7 +4,7 @@ use core::fmt;
 
 use crate::aabb::{Aabb, distance_squared};
 use crate::pool::{self, Handle, Pool};
-use crate::storage::{IntoBuffer, Storage};
+use crate::storage::{Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// "No node" / "no entry" in a link.
@@ -29,6 +29,7 @@ pub struct Node {
 
 /// A value in an [`Orthtree`] together with its position and links. Opaque;
 /// it appears in the types [`Slot`] and [`EntryId`].
+#[derive(Clone)]
 pub struct Entry<T, const D: usize> {
     value: T,
     position: [f32; D],
@@ -183,6 +184,26 @@ pub struct Orthtree<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>
     free_block: u32,
     // Nodes currently part of the tree.
     live_nodes: u32,
+}
+
+/// Entry ids of the original refer to the same entries in the copy. Only
+/// trees with inline storage can be cloned.
+impl<T: Clone, const D: usize, const NODES: usize, const ENTRIES: usize> Clone
+    for Orthtree<T, D, Inline<NODES>, Inline<ENTRIES>>
+{
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            entries: self.entries.clone(),
+            root: self.root,
+            bounds: self.bounds,
+            leaf_size: self.leaf_size,
+            max_depth: self.max_depth,
+            used: self.used,
+            free_block: self.free_block,
+            live_nodes: self.live_nodes,
+        }
+    }
 }
 
 impl<T, const D: usize, SN: Storage<Node>, SE: Storage<Slot<T, D>>> Orthtree<T, D, SN, SE> {

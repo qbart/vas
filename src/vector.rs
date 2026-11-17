@@ -83,6 +83,21 @@ impl<T, const N: usize> Default for Vector<T, Inline<N>> {
     }
 }
 
+/// Clones the elements into a vector of the same capacity. Only vectors
+/// with inline storage can be cloned: they are the only ones that carry
+/// their own memory.
+impl<T: Clone, const N: usize> Clone for Vector<T, Inline<N>> {
+    fn clone(&self) -> Self {
+        let mut copy = Self::inline();
+        for (slot, value) in copy.buffer.iter_mut().zip(self.as_slice()) {
+            slot.write(value.clone());
+            // Counted one by one, so a panicking `clone` leaks nothing.
+            copy.len += 1;
+        }
+        copy
+    }
+}
+
 impl<T, A: Allocator + Default> Default for Vector<T, Dynamic<A>> {
     /// Creates an empty vector that grows through `A::default()`.
     #[inline]

@@ -5,7 +5,7 @@ use core::fmt;
 
 use crate::allocator::Allocator;
 use crate::heap::{Heap, Order};
-use crate::storage::{Buffer, Dynamic, IntoBuffer, Storage};
+use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
 /// The thing being searched: anything that can list the neighbours of a
@@ -55,6 +55,7 @@ impl core::error::Error for PathError {}
 
 /// Per-node search state. Opaque; it only exists so the user can size the
 /// memory for a [`PathFinder`]: one per node, `Memory::<Node, N>`.
+#[derive(Clone, Copy)]
 pub struct Node {
     // The search that last touched this node. Other fields are only
     // meaningful when it equals the finder's current stamp.
@@ -67,6 +68,7 @@ pub struct Node {
 
 /// An entry of the open list. Opaque; it only exists so the user can size
 /// the memory for a [`PathFinder`]: `Memory::<Open, N>`.
+#[derive(Clone, Copy)]
 pub struct Open {
     // Cost so far plus the heuristic.
     priority: f32,
@@ -76,6 +78,7 @@ pub struct Open {
 }
 
 /// Lowest priority first; on ties, the entry further along the path.
+#[derive(Clone, Copy)]
 struct Cheapest;
 
 impl Order<Open> for Cheapest {
@@ -130,6 +133,19 @@ pub struct PathFinder<SN: Storage<Node>, SO: Storage<Open> = SN> {
     stamp: u32,
     // Start and goal of the last search, when it found a path.
     found: Option<(u32, u32)>,
+}
+
+/// The copy remembers the last search. Only finders with inline storage
+/// can be cloned.
+impl<const NODES: usize, const OPEN: usize> Clone for PathFinder<Inline<NODES>, Inline<OPEN>> {
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            open: self.open.clone(),
+            stamp: self.stamp,
+            found: self.found,
+        }
+    }
 }
 
 impl<AN, AO> Default for PathFinder<Dynamic<AN>, Dynamic<AO>>

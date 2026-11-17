@@ -12,6 +12,7 @@ const NONE: u32 = u32::MAX;
 
 /// A value in a [`BinaryTree`] together with its links. Opaque; it appears
 /// in the types [`Slot`] and [`NodeId`].
+#[derive(Clone)]
 pub struct Node<T> {
     value: T,
     // Links are slot indices of live nodes, or `NONE`.
@@ -125,6 +126,17 @@ impl<T, const N: usize> Default for BinaryTree<T, Inline<N>> {
     #[inline]
     fn default() -> Self {
         Self::inline()
+    }
+}
+
+/// Node ids of the original refer to the same nodes in the copy. Only
+/// trees with inline storage can be cloned.
+impl<T: Clone, const N: usize> Clone for BinaryTree<T, Inline<N>> {
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            root: self.root,
+        }
     }
 }
 

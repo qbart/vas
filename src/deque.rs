@@ -66,6 +66,20 @@ impl<T, const N: usize> Default for Deque<T, Inline<N>> {
     }
 }
 
+/// Clones the elements, in order, into a deque of the same capacity. Only
+/// deques with inline storage can be cloned.
+impl<T: Clone, const N: usize> Clone for Deque<T, Inline<N>> {
+    fn clone(&self) -> Self {
+        let mut copy = Self::inline();
+        for (slot, value) in copy.buffer.iter_mut().zip(self.iter()) {
+            slot.write(value.clone());
+            // Counted one by one, so a panicking `clone` leaks nothing.
+            copy.len += 1;
+        }
+        copy
+    }
+}
+
 impl<T, A: Allocator + Default> Default for Deque<T, Dynamic<A>> {
     /// Creates an empty deque that grows through `A::default()`.
     #[inline]

@@ -134,6 +134,32 @@ Costs of the parameter:
 `Borrowed<'a>` keeps the slice as a pointer and a length, so generic code
 over `Vector<T, Borrowed<'a>>` needs no `T: 'a` bound.
 
+## Cloning
+
+A container with `Inline<N>` storage is `Clone` when its elements are (and,
+for `Map` and `Heap`, the hasher or the order). The copy has the same
+capacity and its own values.
+
+```rust
+let mut squad = Vector::<Unit, Inline<8>>::inline();
+let snapshot = squad.clone();
+```
+
+- Containers that hand out handles or ids (`Pool`, `Tree`, `BinaryTree`,
+  `Graph`, `SpatialGrid`, `Quadtree`/`Octree`) keep every value in its slot
+  with its generation: a handle from the original refers to the same value
+  in the copy, and a stale handle stays stale.
+- `Map` keeps every entry in its slot, so cloning does not hash anything.
+- `PathFinder` copies the result of its last search.
+- Cloning costs one `clone` per element; no memory is requested.
+- If an element's `clone` panics, the elements cloned so far are dropped.
+
+Containers with `Borrowed` storage are not `Clone`: the copy would need
+memory of its own, and only the user can provide it. Containers with
+`Dynamic` storage are not `Clone` either: `clone` cannot report that the
+allocator refused. To copy one, create a container on new memory and insert
+the elements.
+
 ## Unsafe
 
 `MaybeUninit` storage avoids any initialisation cost and works for every `T`,

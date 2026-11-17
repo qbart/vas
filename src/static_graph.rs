@@ -7,7 +7,7 @@ use core::fmt;
 use crate::Vector;
 use crate::graph::Cost;
 use crate::path::Space;
-use crate::storage::{IntoBuffer, Storage};
+use crate::storage::{Inline, IntoBuffer, Storage};
 
 /// One outgoing edge of a [`StaticGraph`]: the node it leads to and its
 /// value.
@@ -75,6 +75,18 @@ pub struct StaticGraph<E, SO: Storage<u32>, SE: Storage<Edge<E>> = SO> {
     // `edges[offsets[i]..offsets[i + 1]]`.
     offsets: Vector<u32, SO>,
     edges: Vector<Edge<E>, SE>,
+}
+
+/// Only graphs with inline storage can be cloned.
+impl<E: Clone, const OFFSETS: usize, const EDGES: usize> Clone
+    for StaticGraph<E, Inline<OFFSETS>, Inline<EDGES>>
+{
+    fn clone(&self) -> Self {
+        Self {
+            offsets: self.offsets.clone(),
+            edges: self.edges.clone(),
+        }
+    }
 }
 
 impl<E: Copy, SO: Storage<u32>, SE: Storage<Edge<E>>> StaticGraph<E, SO, SE> {
