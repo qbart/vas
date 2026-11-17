@@ -465,6 +465,13 @@ fn path() {
 fn run() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
+    // Let the CPU reach full speed first: the first cases otherwise read
+    // up to 2x too slow.
+    let start = Instant::now();
+    let mut spin = 0u64;
+    while start.elapsed().as_millis() < 1000 {
+        spin = black_box(spin.wrapping_mul(31).wrapping_add(7));
+    }
     vector();
     deque();
     heap();

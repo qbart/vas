@@ -638,7 +638,7 @@ fn main() {
     // Lets the CPU reach full speed before the first case is timed.
     let start = Instant::now();
     let mut spin = 0u64;
-    while start.elapsed().as_millis() < 300 {
+    while start.elapsed().as_millis() < 1000 {
         spin = black_box(spin.wrapping_mul(31).wrapping_add(7));
     }
     vector();

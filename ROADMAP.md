@@ -151,12 +151,12 @@
 - [x] Benchmarks against other crates (`make bench-crates`, unpublished `bench/` crate)
 - [x] Usage examples, compiled and run by `make check` (`examples/`)
 - [x] CI: `make check` and Miri on every push (`.github/workflows/ci.yml`, `.forgejo/workflows/ci.yml`)
+- [x] `Deque` against `heapless::Deque`: the 1.6x gap was a cold-CPU measuring error; warmed up it is 1.0 against 1.1 ns (`make bench-crates` now warms up too)
 
 ## Later
 
 - [ ] Red-black tree
 - [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
-- [ ] `Deque`: find out why it is about 1.6x slower than `heapless::Deque`
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)
   - [x] Storage parameter on `Vector` (0.22.0): `Vector<T, S>` with

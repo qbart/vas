@@ -77,14 +77,14 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 
 | Case | Implementation | ns / op |
 |---|---|---:|
-| push 100k u64 | vas::Vector | 0.8 |
-| push 100k u64 | vas::Vector (growing, `Dynamic`) | 1.0 |
-| push 100k u64 | std Vec (reserved) | 0.8 |
-| push 100k u64 | std Vec (growing) | 0.8 |
-| queue 100k push+pop | vas::Deque | 2.2 |
-| queue 100k push+pop | std VecDeque | 1.6 |
-| heap 50k push then pop | vas::Heap | 18.0 |
-| heap 50k push then pop | std BinaryHeap | 17.2 |
+| push 100k u64 | vas::Vector | 0.4 |
+| push 100k u64 | vas::Vector (growing, `Dynamic`) | 0.5 |
+| push 100k u64 | std Vec (reserved) | 0.4 |
+| push 100k u64 | std Vec (growing) | 0.4 |
+| queue 100k push+pop | vas::Deque | 1.0 |
+| queue 100k push+pop | std VecDeque | 1.3 |
+| heap 50k push then pop | vas::Heap | 17.8 |
+| heap 50k push then pop | std BinaryHeap | 18.0 |
 | map 2000 keys: insert | vas::Map (50% full) | 2.5 |
 | map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 8.1 |
 | map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.0 |
@@ -165,8 +165,8 @@ algorithms, so theirs differ).
 | Structure | Against | Result |
 |---|---|---|
 | `Vector` | `arrayvec`, `heapless` | same speed |
-| `Deque` | `heapless::Deque` | about 1.6x slower |
-| `Heap` | `heapless::BinaryHeap` | level to slightly slower (within run-to-run noise) |
+| `Deque` | `heapless::Deque` | level to slightly faster |
+| `Heap` | `heapless::BinaryHeap` | about 1.15x slower |
 | `Map`, 2k keys | `hashbrown` | inserts level, lookups 1.4x to 2x slower (under 1 ns) |
 | `Map`, 50k keys | `hashbrown` | inserts level, hits 1.7x slower, misses 1.6x faster |
 | `Map` | `heapless::FnvIndexMap` | level to 1.3x faster at 2k keys, 4x to 8x faster at 50k |
@@ -181,9 +181,11 @@ Notes:
 
 - The map here has 131072 slots for 50k keys (38% full), where the std
   comparison above uses 100k slots (50% full).
-- `heapless::Deque` is the one clear loss. The likely cause is that vas
-  checks bounds on every slot access where `heapless` does not; this has not
-  been confirmed by profiling.
+- Earlier versions of this page had `Deque` 1.6x behind `heapless::Deque`
+  (2.2 against 1.4 ns). That was a measuring error: the vector, deque and
+  heap cases run first, while the CPU is still speeding up, and read up to
+  2x too slow. Both benchmarks now spin for a second before the first
+  case.
 - `rstar` is a general R-tree that also handles shapes with a size; a k-d
   tree and a grid are specialised for points, so beating it on point queries
   is expected.
@@ -194,13 +196,13 @@ Notes:
 
 | Case | Implementation | ns / op |
 |---|---|---:|
-| push 100k u64 | vas::Vector | 0.8 |
-| push 100k u64 | arrayvec::ArrayVec | 0.8 |
-| push 100k u64 | heapless::Vec | 0.8 |
-| queue 100k push+pop | vas::Deque | 2.2 |
-| queue 100k push+pop | heapless::Deque | 1.4 |
-| heap 50k push then pop | vas::Heap | 20.4 |
-| heap 50k push then pop | heapless::BinaryHeap | 17.0 |
+| push 100k u64 | vas::Vector | 0.4 |
+| push 100k u64 | arrayvec::ArrayVec | 0.4 |
+| push 100k u64 | heapless::Vec | 0.4 |
+| queue 100k push+pop | vas::Deque | 1.0 |
+| queue 100k push+pop | heapless::Deque | 1.1 |
+| heap 50k push then pop | vas::Heap | 17.7 |
+| heap 50k push then pop | heapless::BinaryHeap | 15.1 |
 | map 2000 keys: insert | vas::Map | 2.5 |
 | map 2000 keys: hits | vas::Map | 1.9 |
 | map 2000 keys: misses | vas::Map | 1.9 |
@@ -226,10 +228,10 @@ Notes:
 | map 50000 keys: hits | heapless::FnvIndexMap | 15.3 |
 | map 50000 keys: misses | heapless::FnvIndexMap | 16.1 |
 | pool 50k insert+get+remove | vas::Pool | 0.5 |
-| pool 50k insert+get+remove | slotmap::SlotMap | 0.7 |
+| pool 50k insert+get+remove | slotmap::SlotMap | 0.6 |
 | pool 50k insert+get+remove | slab::Slab (no stale detection) | 0.5 |
-| bitset 100k insert+test | vas::Bitset | 0.4 |
-| bitset 100k insert+test | fixedbitset::FixedBitSet | 0.4 |
+| bitset 100k insert+test | vas::Bitset | 0.3 |
+| bitset 100k insert+test | fixedbitset::FixedBitSet | 0.3 |
 | rng 1M u64 | vas::Rng | 0.5 |
 | rng 1M u64 | fastrand::Rng | 0.4 |
 | rng 1M in 0..6 | vas::Rng | 0.9 |
