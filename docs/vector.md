@@ -51,6 +51,11 @@ what makes it suitable for handing data to a renderer.
 | remove, fast | `swap_remove(usize) -> Option<T>` | O(1), does not preserve order |
 | shrink | `truncate(usize)`, `clear()` | drops the removed elements |
 | view | `as_slice`, `as_mut_slice`, `Deref<Target = [T]>` | all slice methods available |
+| filter | `retain(FnMut(&T) -> bool)`, `retain_mut(FnMut(&mut T) -> bool)` | O(n), keeps order, one call per element front to back |
+| remove repeats | `dedup()`, `dedup_by_key(FnMut(&mut T) -> K)`, `dedup_by(FnMut(&mut T, &mut T) -> bool)` | O(n); consecutive repeats only, so sort first to remove all duplicates |
+| stable sort | `sort_stable()`, `sort_stable_by(cmp)`, `sort_stable_by_key(key)` | equal elements keep their order; no memory needed; O(n log n) comparisons, O(n log² n) moves |
+| stable sort, faster | `sort_stable_in(&mut [MaybeUninit<T>], cmp)` | uses the scratch memory you pass, any size; with room for n / 2 elements O(n log n) moves; 3x to 4x faster than without |
+| slice algorithms | `sort_unstable*`, `binary_search*`, `select_nth_unstable`, `reverse`, `rotate_*`, `contains`, `iter().position` | from the slice, through `Deref`
 
 ## Growing
 

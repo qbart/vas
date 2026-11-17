@@ -34,6 +34,7 @@ Elements that compare equal are popped in no particular order.
 | peek | `peek() -> Option<&T>` | O(1) |
 | view | `as_slice() -> &[T]` | heap order: first is next to pop |
 | clear | `clear()` | drops all elements |
+| filter | `retain(FnMut(&T) -> bool)` | O(n): the heap order is rebuilt afterwards |
 
 There is no way to change the priority of an element already in the heap.
 Push the element again with its new priority and ignore the outdated copy

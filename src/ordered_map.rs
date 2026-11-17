@@ -171,6 +171,14 @@ impl<K, V, S: Storage<(K, V)>> OrderedMap<K, V, S> {
         }
     }
 
+    /// Keeps only the entries for which `keep` returns `true`; the others
+    /// are removed and dropped. O(n); `keep` is called once per entry, in
+    /// key order.
+    #[inline]
+    pub fn retain(&mut self, mut keep: impl FnMut(&K, &mut V) -> bool) {
+        self.entries.retain_mut(|(key, value)| keep(key, value));
+    }
+
     /// Iterates over all entries in key order, with mutable access to the
     /// values.
     #[inline]

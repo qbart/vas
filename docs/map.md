@@ -94,6 +94,7 @@ the tag, so a hasher should mix its input into both halves.
 | reserve | `reserve(additional) -> Result<(), Full<()>>` | grows dynamic storage; only checks fixed storage |
 | clear | `clear()` | drops all entries |
 | iterate | `iter`, `iter_mut`, `&map`, `&mut map` | `(&K, &V)` / `(&K, &mut V)`; cost is proportional to capacity |
+| filter | `retain(FnMut(&K, &mut V) -> bool)` | O(capacity); one call per entry, in no particular order |
 
 ## Guarantees
 

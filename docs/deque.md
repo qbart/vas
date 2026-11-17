@@ -25,6 +25,8 @@ contiguous block; use `Vector` when a single block is required.
 | view | `as_slices`, `as_mut_slices` | front-to-back; second slice empty unless wrapped |
 | iterate | `iter`, `iter_mut`, `&deque`, `&mut deque` | front to back, double-ended |
 | clear | `clear()` | drops all elements |
+| filter | `retain(FnMut(&T) -> bool)`, `retain_mut(FnMut(&mut T) -> bool)` | O(n), keeps order |
+| one slice | `make_contiguous() -> &mut [T]` | O(capacity) when wrapped, O(1) otherwise; then sort or binary search the slice |
 
 ## Guarantees
 

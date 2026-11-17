@@ -151,7 +151,7 @@ let snapshot = squad.clone();
   with its generation: a handle from the original refers to the same value
   in the copy, and a stale handle stays stale.
 - `Map` keeps every entry in its slot, so cloning does not hash anything.
-- `PathFinder` copies the result of its last search.
+- `PathFinder` and `Traversal` copy the result of their last search.
 - Cloning costs one `clone` per element; no memory is requested.
 - If an element's `clone` panics, the elements cloned so far are dropped.
 

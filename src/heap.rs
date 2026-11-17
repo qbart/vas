@@ -249,6 +249,33 @@ impl<T, S: Storage<T>, O: Order<T>> Heap<T, S, O> {
         Ok(())
     }
 
+    /// Keeps only the elements for which `keep` returns `true` and drops the
+    /// others. O(n): the heap order is rebuilt from scratch afterwards.
+    /// `keep` is called once per element, in no particular order.
+    pub fn retain(&mut self, keep: impl FnMut(&T) -> bool) {
+        self.items.retain(keep);
+        // Bottom-up heap construction: sift every parent down, last first.
+        let items = self.items.as_mut_slice();
+        for start in (0..items.len() / 2).rev() {
+            let mut parent = start;
+            loop {
+                let mut top = parent;
+                for child in [2 * parent + 1, 2 * parent + 2] {
+                    if let (Some(candidate), Some(current)) = (items.get(child), items.get(top))
+                        && self.order.cmp(candidate, current) == Ordering::Greater
+                    {
+                        top = child;
+                    }
+                }
+                if top == parent {
+                    break;
+                }
+                items.swap(parent, top);
+                parent = top;
+            }
+        }
+    }
+
     /// Removes and returns the greatest element, or `None` when empty.
     #[inline]
     pub fn pop(&mut self) -> Option<T> {

@@ -76,6 +76,7 @@ that should accept any kind are generic over `S`.
 | range | `range(a..b)` and the other range forms | entries with keys in the range; an inverted range is empty |
 | iterate | `iter`, `iter_mut`, `&map`, `&mut map` | key order; double-ended |
 | clear | `clear()` | drops all entries |
+| filter | `retain(FnMut(&K, &mut V) -> bool)` | O(n log n), key order |
 | reserve | `reserve(additional) -> Result<(), Full<()>>` | grows dynamic storage; only checks on fixed storage |
 | clone | `clone()` | inline storage only; see [storage](storage.md#cloning) |
 

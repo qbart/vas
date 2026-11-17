@@ -351,6 +351,21 @@ impl<T, S: Storage<Slot<T>>> Pool<T, S> {
         self.get(handle).is_some()
     }
 
+    /// Keeps only the values for which `keep` returns `true`; the others
+    /// are removed and dropped, and their handles go stale. O(capacity);
+    /// `keep` is called once per value, in slot order.
+    pub fn retain(&mut self, mut keep: impl FnMut(Handle<T>, &mut T) -> bool) {
+        for index in 0..self.initialized {
+            let Some(handle) = self.handle_at(index) else {
+                continue;
+            };
+            let kept = self.get_mut(handle).is_none_or(|value| keep(handle, value));
+            if !kept {
+                drop(self.remove(handle));
+            }
+        }
+    }
+
     /// Removes and drops all values. Every existing handle goes stale.
     pub fn clear(&mut self) {
         let mut free_head = self.free_head;

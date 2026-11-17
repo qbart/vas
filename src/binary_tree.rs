@@ -2,10 +2,10 @@
 
 use core::fmt;
 
-use crate::Full;
 use crate::allocator::Allocator;
 use crate::pool::{self, Handle, Pool};
 use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// "No node" in a link.
 const NONE: u32 = u32::MAX;
@@ -319,6 +319,96 @@ impl<T, S: Storage<Slot<T>>> BinaryTree<T, S> {
     #[inline]
     pub fn post_order(&self, id: NodeId<T>) -> Walk<'_, T, S> {
         self.walk(id, Order::Post)
+    }
+
+    /// Appends the subtree of `id` to `out` level by level: `id`, then its
+    /// children, then their children, each level left to right.
+    /// O(subtree).
+    ///
+    /// `out` is also the work queue, so no other memory is needed. When it
+    /// runs out of room it is left as it was and `Full` is returned. A stale
+    /// `id` appends nothing.
+    pub fn level_order_into<O: Storage<NodeId<T>>>(
+        &self,
+        id: NodeId<T>,
+        out: &mut Vector<NodeId<T>, O>,
+    ) -> Result<(), Full<()>> {
+        if !self.nodes.contains(id) {
+            return Ok(());
+        }
+        let start = out.len();
+        if out.push(id).is_err() {
+            return Err(Full(()));
+        }
+        let mut cursor = start;
+        while let Some(current) = out.get(cursor).copied() {
+            for child in [self.left(current), self.right(current)]
+                .into_iter()
+                .flatten()
+            {
+                if out.push(child).is_err() {
+                    out.truncate(start);
+                    return Err(Full(()));
+                }
+            }
+            cursor += 1;
+        }
+        Ok(())
+    }
+
+    /// The deepest node that has both `a` and `b` in its subtree (a node is
+    /// in its own subtree). `None` when either id is stale. O(depth).
+    pub fn common_ancestor(&self, a: NodeId<T>, b: NodeId<T>) -> Option<NodeId<T>> {
+        let (mut a_depth, mut b_depth) = (self.depth(a)?, self.depth(b)?);
+        let (mut a, mut b) = (a.index(), b.index());
+        while a_depth > b_depth {
+            a = self.link(a, |node| node.parent);
+            a_depth -= 1;
+        }
+        while b_depth > a_depth {
+            b = self.link(b, |node| node.parent);
+            b_depth -= 1;
+        }
+        while a != b {
+            a = self.link(a, |node| node.parent);
+            b = self.link(b, |node| node.parent);
+        }
+        self.nodes.handle_at(a)
+    }
+
+    /// Number of links on the longest path from `id` down to a leaf: 0 for
+    /// a leaf. O(subtree), no recursion.
+    pub fn height(&self, id: NodeId<T>) -> Option<usize> {
+        let top = id.index();
+        self.nodes.get(id)?;
+        let (mut current, mut depth, mut height) = (top, 0, 0);
+        loop {
+            height = height.max(depth);
+            let (left, right) = (
+                self.link(current, |node| node.left),
+                self.link(current, |node| node.right),
+            );
+            if left != NONE || right != NONE {
+                current = if left != NONE { left } else { right };
+                depth += 1;
+                continue;
+            }
+            // A leaf: climb to the nearest right subtree not walked yet.
+            loop {
+                if current == top {
+                    return Some(height);
+                }
+                let parent = self.link(current, |node| node.parent);
+                depth -= 1;
+                let right = self.link(parent, |node| node.right);
+                if self.link(parent, |node| node.left) == current && right != NONE {
+                    current = right;
+                    depth += 1;
+                    break;
+                }
+                current = parent;
+            }
+        }
     }
 
     /// Iterates over all nodes and their values, in no particular order.

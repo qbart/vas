@@ -46,6 +46,7 @@ let mut keyframes = OrderedMap::new(&mut memory);
 | iterate | `iter`, `iter_mut`, `&map`, `&mut map` | key order; double-ended |
 | view | `as_slice() -> &[(K, V)]` | sorted, contiguous |
 | clear | `clear()` | drops all entries |
+| filter | `retain(FnMut(&K, &mut V) -> bool)` | O(n), key order |
 
 ## Guarantees
 

@@ -381,6 +381,49 @@ impl<T, S: Storage<T>> Deque<T, S> {
         first.iter_mut().chain(second.iter_mut())
     }
 
+    /// Keeps only the elements for which `keep` returns `true`, in their
+    /// order, and drops the others. O(n); `keep` is called once per element,
+    /// front to back.
+    #[inline]
+    pub fn retain(&mut self, mut keep: impl FnMut(&T) -> bool) {
+        self.retain_mut(|value| keep(value));
+    }
+
+    /// Like [`retain`](Self::retain), with mutable access to the elements.
+    pub fn retain_mut(&mut self, mut keep: impl FnMut(&mut T) -> bool) {
+        let mut kept = 0;
+        for index in 0..self.len {
+            if self.get_mut(index).is_some_and(&mut keep) {
+                // Kept elements move towards the front; the rejected ones
+                // collect at the back and are dropped below.
+                let (to, from) = (self.physical(kept), self.physical(index));
+                self.buffer.slots_mut().swap(to, from);
+                kept += 1;
+            }
+        }
+        while self.len > kept {
+            drop(self.pop_back());
+        }
+    }
+
+    /// Moves the elements so that they form one slice, front to back, and
+    /// returns it. Afterwards [`as_slices`](Self::as_slices) has an empty
+    /// second slice, and slice algorithms such as `sort_unstable` or
+    /// `binary_search` can be used.
+    ///
+    /// O(capacity) when the contents wrap around the end of the block,
+    /// O(1) otherwise.
+    pub fn make_contiguous(&mut self) -> &mut [T] {
+        if self.split_lens().1 != 0 {
+            // Rotating the raw slots moves the bytes of every slot, filled
+            // or not, so nothing is dropped or duplicated.
+            let head = self.head;
+            self.buffer.slots_mut().rotate_left(head);
+            self.head = 0;
+        }
+        self.as_mut_slices().0
+    }
+
     /// Removes and drops all elements.
     pub fn clear(&mut self) {
         let (first, second) = self.as_mut_slices();

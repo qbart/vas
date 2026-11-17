@@ -2,13 +2,14 @@
 
 #![allow(unsafe_code)]
 
+use core::cmp::Ordering;
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::{fmt, ptr, slice};
 
 use crate::allocator::Allocator;
 use crate::storage::{Allocation, Buffer, Dynamic, Inline, IntoBuffer, Storage};
-use crate::{Full, InsertError};
+use crate::{Full, InsertError, sort};
 
 /// A contiguous vector.
 ///
@@ -395,6 +396,116 @@ impl<T, S: Storage<T>> Vector<T, S> {
     #[inline]
     pub fn clear(&mut self) {
         self.truncate(0);
+    }
+
+    /// Keeps only the elements for which `keep` returns `true`, in their
+    /// order, and drops the others. O(n); `keep` is called once per element,
+    /// front to back.
+    #[inline]
+    pub fn retain(&mut self, mut keep: impl FnMut(&T) -> bool) {
+        self.retain_mut(|value| keep(value));
+    }
+
+    /// Like [`retain`](Self::retain), with mutable access to the elements.
+    pub fn retain_mut(&mut self, mut keep: impl FnMut(&mut T) -> bool) {
+        let items = self.as_mut_slice();
+        let mut kept = 0;
+        for index in 0..items.len() {
+            if items.get_mut(index).is_some_and(&mut keep) {
+                // Kept elements move to the front; the rejected ones collect
+                // at the back and are dropped below. A panic in `keep`
+                // leaves every element in the vector, only reordered.
+                items.swap(kept, index);
+                kept += 1;
+            }
+        }
+        self.truncate(kept);
+    }
+
+    /// Removes consecutive repeated elements, keeping the first of each
+    /// run. On a sorted vector this removes all duplicates. O(n).
+    #[inline]
+    pub fn dedup(&mut self)
+    where
+        T: PartialEq,
+    {
+        self.dedup_by(|a, b| a == b);
+    }
+
+    /// Removes consecutive elements that map to the same key, keeping the
+    /// first of each run. O(n).
+    #[inline]
+    pub fn dedup_by_key<K: PartialEq>(&mut self, mut key: impl FnMut(&mut T) -> K) {
+        self.dedup_by(|a, b| key(a) == key(b));
+    }
+
+    /// Removes each element for which `same(element, kept)` returns `true`,
+    /// where `kept` is the last element that stayed. O(n).
+    pub fn dedup_by(&mut self, mut same: impl FnMut(&mut T, &mut T) -> bool) {
+        let items = self.as_mut_slice();
+        if items.is_empty() {
+            return;
+        }
+        let mut kept = 1;
+        for index in 1..items.len() {
+            let (front, back) = items.split_at_mut(index);
+            let repeated = match (back.first_mut(), front.get_mut(kept - 1)) {
+                (Some(current), Some(last)) => same(current, last),
+                _ => false,
+            };
+            if !repeated {
+                items.swap(kept, index);
+                kept += 1;
+            }
+        }
+        self.truncate(kept);
+    }
+
+    /// Sorts the elements, keeping equal elements in their order. Needs no
+    /// memory; O(n log n) comparisons and O(n log² n) moves.
+    ///
+    /// `sort_unstable` (from the slice) is faster when the order of equal
+    /// elements does not matter.
+    #[inline]
+    pub fn sort_stable(&mut self)
+    where
+        T: Ord,
+    {
+        sort::stable(self.as_mut_slice(), &mut [], &mut |a: &T, b: &T| a < b);
+    }
+
+    /// Sorts the elements by `compare`, keeping equal elements in their
+    /// order. See [`sort_stable`](Self::sort_stable).
+    #[inline]
+    pub fn sort_stable_by(&mut self, compare: impl FnMut(&T, &T) -> Ordering) {
+        sort::stable(self.as_mut_slice(), &mut [], &mut sort::by(compare));
+    }
+
+    /// Sorts the elements by `compare`, keeping equal elements in their
+    /// order, using `scratch` to go faster. Any amount of scratch memory
+    /// works; with room for half the elements every merge uses it, and the
+    /// sort is O(n log n) moves instead of O(n log² n).
+    ///
+    /// `scratch` is only borrowed for the call: pass a `Memory` block, an
+    /// arena piece or any `&mut [MaybeUninit<T>]`. Its contents are not
+    /// read and are left uninitialised.
+    #[inline]
+    pub fn sort_stable_in(
+        &mut self,
+        scratch: &mut [MaybeUninit<T>],
+        compare: impl FnMut(&T, &T) -> Ordering,
+    ) {
+        sort::stable(self.as_mut_slice(), scratch, &mut sort::by(compare));
+    }
+
+    /// Sorts the elements by the key `key` gives, keeping elements with
+    /// equal keys in their order. The key is computed on every comparison.
+    /// See [`sort_stable`](Self::sort_stable).
+    #[inline]
+    pub fn sort_stable_by_key<K: Ord>(&mut self, mut key: impl FnMut(&T) -> K) {
+        sort::stable(self.as_mut_slice(), &mut [], &mut |a: &T, b: &T| {
+            key(a) < key(b)
+        });
     }
 
     /// The contents as one contiguous slice.

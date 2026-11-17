@@ -79,11 +79,32 @@ fixed storage the cost is the same without the word.
 |---|---|---|
 | `Rng` | O(1) per number | loot rolls, procedural generation, shuffles; seedable and replayable |
 | `PathFinder` | A* / Dijkstra, O((nodes + edges) log nodes) worst case | unit movement on tile grids, navigation graphs |
+| `Traversal` breadth first | O(nodes + edges reached) | flood fill, tiles within N moves, fewest steps |
+| `Traversal` depth first | O(nodes + edges reached), no recursion | reachability, dependency walks, maze generation |
+| `Traversal` topological order | O(nodes + edges) | build orders, tech trees, system update order |
+
+Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
+
+| Structure | Algorithm | Cost |
+|---|---|---|
+| `Vector` | `retain`, `dedup` | O(n) |
+| `Vector` | `sort_stable` (in place, no memory) | O(n log n) comparisons, O(n log² n) moves; O(n) when sorted |
+| `Vector` | `sort_stable_in` (scratch from the caller) | O(n log n) with n / 2 scratch |
+| `Vector` | slice `sort_unstable`, `binary_search`, `select_nth_unstable` | O(n log n), O(log n), O(n) |
+| `Deque` | `retain`; `make_contiguous` | O(n); O(capacity) when wrapped |
+| `Pool`, `Map` | `retain` | O(capacity) |
+| `OrderedMap`, `Heap` | `retain` | O(n) |
+| `TreeMap` | `retain` | O(n log n) |
+| `Tree` | `post_order`, `breadth_first_into` | O(subtree) |
+| `Tree`, `BinaryTree` | `common_ancestor` | O(depth) |
+| `BinaryTree` | `level_order_into`, `height` | O(subtree) |
+
 
 Algorithms so far:
 
 - `Rng`: seedable pseudo-random number generator
 - `PathFinder`: A* / Dijkstra shortest path
+- `Traversal`: breadth first, depth first, topological order over graphs and grids
 
 Runnable samples for every structure are in [examples](examples); run one
 with `cargo run --example containers` (or `arena`, `hierarchy`, `pathfinding`,

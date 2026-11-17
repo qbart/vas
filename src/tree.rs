@@ -3,10 +3,10 @@
 
 use core::fmt;
 
-use crate::Full;
 use crate::allocator::Allocator;
 use crate::pool::{self, Handle, Pool};
 use crate::storage::{Dynamic, Inline, IntoBuffer, Storage};
+use crate::{Full, Vector};
 
 /// "No node" in a link.
 const NONE: u32 = u32::MAX;
@@ -385,6 +385,91 @@ impl<T, S: Storage<Slot<T>>> Tree<T, S> {
         }
     }
 
+    /// Iterates over the subtree of `id`, children before their parent:
+    /// each node comes after all of its descendants, children in order, and
+    /// `id` comes last. Needs no extra memory.
+    ///
+    /// For work that flows upwards, such as summing values or computing
+    /// bounds from the leaves to the root.
+    #[inline]
+    pub fn post_order(&self, id: NodeId<T>) -> PostOrder<'_, T, S> {
+        let next = if self.nodes.contains(id) {
+            self.deepest_first(id.index())
+        } else {
+            NONE
+        };
+        PostOrder {
+            tree: self,
+            top: id.index(),
+            next,
+        }
+    }
+
+    /// Appends the subtree of `id` to `out` level by level: `id`, then its
+    /// children, then their children, each level in order. O(subtree).
+    ///
+    /// `out` is also the work queue, so no other memory is needed. When it
+    /// runs out of room it is left as it was and `Full` is returned. A stale
+    /// `id` appends nothing.
+    pub fn breadth_first_into<O: Storage<NodeId<T>>>(
+        &self,
+        id: NodeId<T>,
+        out: &mut Vector<NodeId<T>, O>,
+    ) -> Result<(), Full<()>> {
+        if !self.nodes.contains(id) {
+            return Ok(());
+        }
+        let start = out.len();
+        if out.push(id).is_err() {
+            return Err(Full(()));
+        }
+        let mut cursor = start;
+        while let Some(current) = out.get(cursor).copied() {
+            for child in self.children(current) {
+                if out.push(child).is_err() {
+                    out.truncate(start);
+                    return Err(Full(()));
+                }
+            }
+            cursor += 1;
+        }
+        Ok(())
+    }
+
+    /// The deepest node that has both `a` and `b` in its subtree (a node is
+    /// in its own subtree). `None` when either id is stale or the two are in
+    /// different trees. O(depth).
+    pub fn common_ancestor(&self, a: NodeId<T>, b: NodeId<T>) -> Option<NodeId<T>> {
+        let (mut a_depth, mut b_depth) = (self.depth(a)?, self.depth(b)?);
+        let (mut a, mut b) = (a.index(), b.index());
+        while a_depth > b_depth {
+            a = self.link(a, |node| node.parent);
+            a_depth -= 1;
+        }
+        while b_depth > a_depth {
+            b = self.link(b, |node| node.parent);
+            b_depth -= 1;
+        }
+        while a != b {
+            a = self.link(a, |node| node.parent);
+            b = self.link(b, |node| node.parent);
+        }
+        self.nodes.handle_at(a)
+    }
+
+    /// Follows first children from `index` down to a leaf.
+    #[inline]
+    fn deepest_first(&self, index: u32) -> u32 {
+        let mut current = index;
+        loop {
+            let child = self.link(current, |node| node.first_child);
+            if child == NONE {
+                return current;
+            }
+            current = child;
+        }
+    }
+
     /// Iterates over all nodes and their values, in no particular order.
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (NodeId<T>, &T)> {
@@ -515,6 +600,32 @@ impl<T, S: Storage<Slot<T>>> Iterator for Ancestors<'_, T, S> {
     fn next(&mut self) -> Option<NodeId<T>> {
         let id = self.tree.nodes.handle_at(self.next)?;
         self.next = self.tree.link(self.next, |node| node.parent);
+        Some(id)
+    }
+}
+
+/// Iterator over a subtree, children before their parent. See
+/// [`Tree::post_order`].
+pub struct PostOrder<'t, T, S: Storage<Slot<T>>> {
+    tree: &'t Tree<T, S>,
+    top: u32,
+    next: u32,
+}
+
+impl<T, S: Storage<Slot<T>>> Iterator for PostOrder<'_, T, S> {
+    type Item = NodeId<T>;
+
+    fn next(&mut self) -> Option<NodeId<T>> {
+        let current = self.next;
+        let id = self.tree.nodes.handle_at(current)?;
+        self.next = if current == self.top {
+            NONE
+        } else {
+            match self.tree.link(current, |node| node.next) {
+                NONE => self.tree.link(current, |node| node.parent),
+                sibling => self.tree.deepest_first(sibling),
+            }
+        };
         Some(id)
     }
 }

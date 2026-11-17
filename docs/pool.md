@@ -44,6 +44,7 @@ Creating a pool is O(1); slots are set up lazily on first use. At most
 | lookup | `get`, `get_mut`, `contains` | O(1); `None` / `false` for a stale handle |
 | clear | `clear()` | drops all values, all handles go stale |
 | iterate | `iter`, `iter_mut`, `&pool`, `&mut pool` | yields `(Handle<T>, &T)` in slot order; cost is proportional to the slots ever used, not to `len` |
+| filter | `retain(FnMut(Handle<T>, &mut T) -> bool)` | O(capacity); removed values' handles go stale |
 
 ## Guarantees
 

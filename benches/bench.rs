@@ -299,6 +299,61 @@ fn map<const N: usize>() {
     );
 }
 
+fn sort() {
+    for size in [1_000usize, 100_000] {
+        let input: Vec<(u32, u32)> = keys(size, 6)
+            .into_iter()
+            .enumerate()
+            .map(|(position, key)| (key % 1000, position as u32))
+            .collect();
+        let group = format!("sort {size} (u32, u32) by key");
+        let mut memory = block::<(u32, u32)>(size);
+        bench(&group, "vas::Vector sort_stable_by_key", size, || {
+            let mut v = Vector::new(&mut memory[..]);
+            let _ = v.extend_from_slice(&input);
+            v.sort_stable_by_key(|pair| pair.0);
+            v.first().map_or(0, |pair| u64::from(pair.1))
+        });
+        let mut scratch = block::<(u32, u32)>(size / 2);
+        bench(
+            &group,
+            "vas::Vector sort_stable_in (n/2 scratch)",
+            size,
+            || {
+                let mut v = Vector::new(&mut memory[..]);
+                let _ = v.extend_from_slice(&input);
+                v.sort_stable_in(&mut scratch, |a, b| a.0.cmp(&b.0));
+                v.first().map_or(0, |pair| u64::from(pair.1))
+            },
+        );
+        let mut small = block::<(u32, u32)>(256);
+        bench(
+            &group,
+            "vas::Vector sort_stable_in (256 scratch)",
+            size,
+            || {
+                let mut v = Vector::new(&mut memory[..]);
+                let _ = v.extend_from_slice(&input);
+                v.sort_stable_in(&mut small, |a, b| a.0.cmp(&b.0));
+                v.first().map_or(0, |pair| u64::from(pair.1))
+            },
+        );
+        bench(&group, "slice sort_unstable_by_key", size, || {
+            let mut v = Vector::new(&mut memory[..]);
+            let _ = v.extend_from_slice(&input);
+            v.sort_unstable_by_key(|pair| pair.0);
+            v.first().map_or(0, |pair| u64::from(pair.0))
+        });
+        let mut std_v = Vec::with_capacity(size);
+        bench(&group, "std sort_by_key (allocates)", size, || {
+            std_v.clear();
+            std_v.extend_from_slice(&input);
+            std_v.sort_by_key(|pair| pair.0);
+            std_v.first().map_or(0, |pair| u64::from(pair.1))
+        });
+    }
+}
+
 fn ordered_map() {
     for size in [32usize, 1024, 16_384] {
         let input = keys(size, 4);
@@ -718,6 +773,7 @@ fn main() {
     heap();
     map::<2_000>();
     map::<50_000>();
+    sort();
     ordered_map();
     pool();
     bitset();

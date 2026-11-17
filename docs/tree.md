@@ -41,6 +41,9 @@ let mut tree = Tree::new(&mut memory);
 | links | `parent`, `first_child`, `last_child`, `next_sibling`, `prev_sibling` | O(1) |
 | depth | `depth(id) -> Option<usize>` | 0 for a root; O(depth) |
 | walk | `roots()`, `children(id)`, `ancestors(id)`, `descendants(id)` | iterators of ids; `descendants` is depth first, parent before children, excluding `id` |
+| children first | `post_order(id)` | iterator over the subtree of `id`, each node after its descendants, `id` last; no memory |
+| level by level | `breadth_first_into(id, &mut Vector<NodeId<T>, S>) -> Result<(), Full<()>>` | appends the subtree; the vector is also the queue, so no other memory; unchanged when it does not fit |
+| common ancestor | `common_ancestor(a, b) -> Option<NodeId<T>>` | deepest node above both (a node is above itself); `None` for different trees; O(depth) |
 | all nodes | `iter`, `iter_mut` | `(id, value)` in no particular order |
 | clear | `clear()` | drops all values, all ids go stale |
 

@@ -153,6 +153,17 @@
 - [x] Level to 1.2x slower than `std::BTreeMap` on inserts and removes, 1.5x faster on lookups at 16k entries
 - [x] `make bench` measures remove+insert and iteration for the ordered maps
 
+## 0.30.0 — algorithms on the structures
+
+- [x] `Vector`: `retain`, `retain_mut`, `dedup`, `dedup_by`, `dedup_by_key`; stable in-place sort `sort_stable`, `sort_stable_by`, `sort_stable_by_key` (no memory) and `sort_stable_in` (scratch memory of any size from the caller)
+- [x] `Deque`: `retain`, `retain_mut`, `make_contiguous`
+- [x] `retain` on `Pool`, `Map`, `OrderedMap`, `TreeMap`, `Heap`
+- [x] `Tree`: `post_order`, `breadth_first_into`, `common_ancestor`
+- [x] `BinaryTree`: `level_order_into`, `common_ancestor`, `height`
+- [x] `Traversal`: breadth first (with step counts and a step limit), depth first (recursive order, no recursion, no stack memory), topological order (Kahn) over any `Space`
+- [x] `docs/algorithms.md`: which algorithm lives on which structure, and why some are left out
+- [x] Complexity table in `README.md`, kept up to date by rule 13
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -162,6 +173,8 @@
 - [x] `Deque` against `heapless::Deque`: the 1.6x gap was a cold-CPU measuring error; warmed up it is 1.0 against 1.1 ns (`make bench-crates` now warms up too)
 
 ## Later
+
+- [ ] Faster stable sort: `sort_stable_in` is about 7x slower than std's driftsort at 100,000 elements
 
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)

@@ -29,6 +29,7 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Map` | `HashMap` with its default hasher | about 2x faster at everything |
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
+| `Vector::sort_stable_in` | std `sort_by_key` | about 2.5x slower at 1k, 7x at 100k; no allocation |
 | `TreeMap` inserts and removes | `BTreeMap` | level to 1.2x slower |
 | `TreeMap` lookups | `BTreeMap` | 1.6x slower at 1k, 1.5x faster at 16k |
 | `TreeMap` iteration | `BTreeMap` | 3x to 5x slower (2.5 to 4.4 ns per entry) |
@@ -123,6 +124,16 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | map 50000 keys: misses | std HashMap + vas FastHasher | 3.3 |
 | map 50000 keys: insert then remove | vas::Map (50% full) | 8.4 |
 | map 50000 keys: insert then remove | std HashMap + vas FastHasher | 5.4 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_by_key | 32.4 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 11.5 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 11.8 |
+| sort 1000 (u32, u32) by key | slice sort_unstable_by_key | 5.0 |
+| sort 1000 (u32, u32) by key | std sort_by_key (allocates) | 4.5 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_by_key | 109.2 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 30.3 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 34.2 |
+| sort 100000 (u32, u32) by key | slice sort_unstable_by_key | 4.0 |
+| sort 100000 (u32, u32) by key | std sort_by_key (allocates) | 4.5 |
 | ordered 32: build | vas::OrderedMap | 10.6 |
 | ordered 32: build | vas::TreeMap | 8.4 |
 | ordered 32: build | std BTreeMap | 13.5 |

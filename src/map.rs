@@ -16,6 +16,10 @@ use crate::storage::{Buffer, Dynamic, Inline, IntoBuffer, Storage};
 /// Tag of a slot that holds no entry. Tags of entries have the top bit set.
 const EMPTY: u8 = 0;
 /// The lowest bit of every byte of a group.
+/// Tag of a slot whose entry `retain` removed, until the hole is closed.
+/// Not `EMPTY`, and never equal to a real tag (those have the top bit set).
+const TOMBSTONE: u8 = 1;
+
 const LOW: u64 = 0x0101_0101_0101_0101;
 /// The top bit of every byte of a group.
 const HIGH: u64 = 0x8080_8080_8080_8080;
@@ -571,7 +575,7 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
         Q: Hash + Eq + ?Sized,
     {
         let capacity = self.used;
-        let mut hole = self.find(key)?;
+        let hole = self.find(key)?;
         let tags = live_mut(&mut self.tags, capacity);
         let slots = self.slots.slots_mut();
         *tags.get_mut(hole)? = EMPTY;
@@ -580,10 +584,66 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
         // exactly once.
         let Slot { key, value } = unsafe { slots.get(hole)?.assume_init_read() };
         self.len -= 1;
+        self.close_hole(hole);
+        Some((key, value))
+    }
 
-        // Backward-shift deletion: close the hole by pulling later entries of
-        // the same probe run back, so no tombstones are needed and every
-        // entry stays reachable from its home slot.
+    /// Keeps only the entries for which `keep` returns `true`; the others
+    /// are removed and dropped. O(capacity); `keep` is called once per
+    /// entry, in no particular order.
+    pub fn retain(&mut self, mut keep: impl FnMut(&K, &mut V) -> bool) {
+        // Removing an entry pulls later entries back, which can bring an
+        // entry that was already visited (from the start of the block,
+        // around the end) into a slot not yet visited. So entries are only
+        // marked here, and the holes are closed afterwards, by the guard,
+        // which also does it when `keep` panics.
+        let guard = Compact { map: self };
+        let map = &mut *guard.map;
+        let capacity = map.used;
+        let tags = live_mut(&mut map.tags, capacity);
+        for (mark, slot) in tags.iter_mut().zip(map.slots.slots_mut()) {
+            if *mark == EMPTY {
+                continue;
+            }
+            // SAFETY: the slot's tag is not `EMPTY`, so it is initialised.
+            let entry = unsafe { slot.assume_init_mut() };
+            if keep(&entry.key, &mut entry.value) {
+                continue;
+            }
+            // Marked first, so a panicking `Drop` cannot lead to a double
+            // drop: a tombstone's slot is never read again.
+            *mark = TOMBSTONE;
+            map.len -= 1;
+            // SAFETY: the slot was occupied and is now a tombstone, so it is
+            // dropped exactly once.
+            unsafe { slot.assume_init_drop() };
+        }
+        drop(guard);
+    }
+
+    /// Turns every tombstone left by `retain` into an empty slot.
+    fn remove_tombstones(&mut self) {
+        let capacity = self.used;
+        for index in 0..capacity {
+            let tags = live_mut(&mut self.tags, capacity);
+            if let Some(mark) = tags.get_mut(index)
+                && *mark == TOMBSTONE
+            {
+                *mark = EMPTY;
+                // Tombstones never move, so whatever lands in `index` is
+                // not one.
+                self.close_hole(index);
+            }
+        }
+    }
+
+    /// Backward-shift deletion: closes the empty slot `hole` by pulling
+    /// later entries of the same probe run back, so no tombstones are
+    /// needed and every entry stays reachable from its home slot.
+    fn close_hole(&mut self, mut hole: usize) {
+        let capacity = self.used;
+        let tags = live_mut(&mut self.tags, capacity);
+        let slots = self.slots.slots_mut();
         let mut index = hole;
         for _ in 1..capacity {
             index = next(index, capacity);
@@ -593,7 +653,12 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
             if mark == EMPTY {
                 break;
             }
-            // SAFETY: the slot's tag is not `EMPTY`, so it is initialised.
+            if mark == TOMBSTONE {
+                // Removed by `retain` and cleared later; may stay anywhere.
+                continue;
+            }
+            // SAFETY: the slot's tag is neither `EMPTY` nor a tombstone, so
+            // it is initialised.
             let entry = unsafe { slot.assume_init_ref() };
             let home = home(self.hasher.hash_one(&entry.key), capacity);
             // An entry whose home lies cyclically in `(hole, index]` is still
@@ -613,7 +678,6 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
                 hole = index;
             }
         }
-        Some((key, value))
     }
 
     /// Index of the occupied slot holding `key`.
@@ -657,6 +721,19 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
 
 /// Fills new storage with the entries of the old one and returns its
 /// capacity. `old_tags` are the initialised tags of the old storage.
+/// Closes the holes `retain` leaves, also when it is left by a panic.
+struct Compact<'m, K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> {
+    map: &'m mut Map<K, V, S, H>,
+}
+
+impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Drop
+    for Compact<'_, K, V, S, H>
+{
+    fn drop(&mut self) {
+        self.map.remove_tombstones();
+    }
+}
+
 fn rehash<K: Hash, V, H: BuildHasher>(
     hasher: &H,
     old_tags: &[u8],

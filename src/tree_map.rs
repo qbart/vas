@@ -205,6 +205,25 @@ impl<K, V, S: Storage<Node<K, V>>> TreeMap<K, V, S> {
         self.root = NONE;
     }
 
+    /// Keeps only the entries for which `keep` returns `true`; the others
+    /// are removed and dropped. O(n log n); `keep` is called once per entry,
+    /// in key order.
+    pub fn retain(&mut self, mut keep: impl FnMut(&K, &mut V) -> bool) {
+        let mut current = outermost(self.nodes.as_slice(), self.root, |node| node.left);
+        while let Some(node) = self.node_mut(current) {
+            let kept = keep(&node.key, &mut node.value);
+            let mut next = neighbour(|index, which| self.link(index, which), current, true);
+            if !kept {
+                // Removing moves the last node into the freed slot.
+                if next as usize == self.nodes.len() - 1 {
+                    next = current;
+                }
+                drop(self.remove_at(current));
+            }
+            current = next;
+        }
+    }
+
     /// Iterates over all entries in key order.
     #[inline]
     pub fn iter(&self) -> Iter<'_, K, V> {
@@ -243,6 +262,16 @@ impl<K, V, S: Storage<Node<K, V>>> TreeMap<K, V, S> {
     #[inline]
     fn node_mut(&mut self, index: u32) -> Option<&mut Node<K, V>> {
         self.nodes.as_mut_slice().get_mut(index as usize)
+    }
+
+    /// One link of node `index`; `NONE` when `index` is out of range.
+    #[inline]
+    fn link(&self, index: u32, which: Link) -> u32 {
+        match which {
+            Link::Parent => self.parent(index),
+            Link::Left => self.left(index),
+            Link::Right => self.right(index),
+        }
     }
 
     /// Left child of `index`; `NONE` when there is none or `index` is.

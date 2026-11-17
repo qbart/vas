@@ -36,6 +36,9 @@ let mut tree = BinaryTree::new(&mut memory);
 | links | `parent`, `left`, `right` | O(1) |
 | depth | `depth(id) -> Option<usize>` | 0 for the root; O(depth) |
 | walk | `pre_order(id)`, `in_order(id)`, `post_order(id)` | iterators over the subtree of `id`, including `id` |
+| level by level | `level_order_into(id, &mut Vector<NodeId<T>, S>) -> Result<(), Full<()>>` | appends the subtree; the vector is also the queue; unchanged when it does not fit |
+| common ancestor | `common_ancestor(a, b) -> Option<NodeId<T>>` | deepest node above both; O(depth) |
+| height | `height(id) -> Option<usize>` | longest path down to a leaf, 0 for a leaf; O(subtree), no recursion |
 | all nodes | `iter`, `iter_mut` | `(id, value)` in no particular order |
 | clear | `clear()` | drops all values, all ids go stale |
 
