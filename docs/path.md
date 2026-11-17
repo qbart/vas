@@ -90,3 +90,10 @@ With `PathFinder<Dynamic<A>>` nothing is sized by hand:
   `PathError::OutOfBounds`.
 
 See [storage](storage.md#dynamic-storage) and [allocator](allocator.md).
+
+## Not included
+
+Hierarchical search (HPA*: clusters, a coarse graph, refinement) is left to
+the library user, because how a map splits into clusters depends on the
+game. `PathFinder` works on any `Space`, so the coarse graph can be a
+`StaticGraph` or `Graph` searched with the same finder.

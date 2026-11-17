@@ -163,7 +163,6 @@
 
 ## Later
 
-- [ ] Hierarchical A* (HPA*): split the map into clusters, search the coarse cluster graph first, then refine only the clusters on the route; for long paths on large maps
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)
   - [x] Storage parameter on `Vector` (0.22.0): `Vector<T, S>` with
