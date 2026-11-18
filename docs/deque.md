@@ -26,7 +26,7 @@ contiguous block; use `Vector` when a single block is required.
 | iterate | `iter`, `iter_mut`, `&deque`, `&mut deque` | front to back, double-ended |
 | clear | `clear()` | drops all elements |
 | filter | `retain(FnMut(&T) -> bool)`, `retain_mut(FnMut(&mut T) -> bool)` | O(n), keeps order |
-| one slice | `make_contiguous() -> &mut [T]` | O(capacity) when wrapped, O(1) otherwise; then sort or binary search the slice |
+| one slice | `make_contiguous() -> &mut [T]` | O(capacity) when wrapped, O(1) otherwise; then sort it with `vas::sort` or binary search it |
 
 ## Guarantees
 

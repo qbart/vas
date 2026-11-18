@@ -300,19 +300,47 @@ fn map<const N: usize>() {
 }
 
 fn sort() {
-    for size in [1_000usize, 100_000] {
-        let input: Vec<(u32, u32)> = keys(size, 6)
-            .into_iter()
-            .enumerate()
-            .map(|(position, key)| (key % 1000, position as u32))
+    // Several inputs in turn: sorting the same one again and again lets the
+    // branch predictor learn it, which flatters branchy sorts.
+    const INPUTS: usize = 8;
+    for (size, distinct) in [(1_000usize, 1000), (100_000, 1000), (100_000, u32::MAX)] {
+        let inputs: Vec<Vec<(u32, u32)>> = (0..INPUTS as u64)
+            .map(|seed| {
+                keys(size, 6 + seed)
+                    .into_iter()
+                    .enumerate()
+                    .map(|(position, key)| (key % distinct, position as u32))
+                    .collect()
+            })
             .collect();
-        let group = format!("sort {size} (u32, u32) by key");
+        let round = std::cell::Cell::new(0usize);
+        let next = || {
+            round.set(round.get() + 1);
+            &inputs[round.get() % INPUTS]
+        };
+        let group = if distinct == u32::MAX {
+            format!("sort {size} (u32, u32) by key, all distinct")
+        } else {
+            format!("sort {size} (u32, u32) by key")
+        };
         let mut memory = block::<(u32, u32)>(size);
+        bench(&group, "vas::Vector sort_unstable_by_key", size, || {
+            let mut v = Vector::new(&mut memory[..]);
+            let _ = v.extend_from_slice(next());
+            v.sort_unstable_by_key(|pair| pair.0);
+            v.first().map_or(0, |pair| u64::from(pair.0))
+        });
+        bench(&group, "core slice sort_unstable_by_key", size, || {
+            let mut v = Vector::new(&mut memory[..]);
+            let _ = v.extend_from_slice(next());
+            v.as_mut_slice().sort_unstable_by_key(|pair| pair.0);
+            v.first().map_or(0, |pair| u64::from(pair.0))
+        });
         bench(&group, "vas::Vector sort_stable_by_key", size, || {
             let mut v = Vector::new(&mut memory[..]);
-            let _ = v.extend_from_slice(&input);
+            let _ = v.extend_from_slice(next());
             v.sort_stable_by_key(|pair| pair.0);
-            v.first().map_or(0, |pair| u64::from(pair.1))
+            v.first().map_or(0, |pair| u64::from(pair.0))
         });
         let mut scratch = block::<(u32, u32)>(size / 2);
         bench(
@@ -321,9 +349,9 @@ fn sort() {
             size,
             || {
                 let mut v = Vector::new(&mut memory[..]);
-                let _ = v.extend_from_slice(&input);
+                let _ = v.extend_from_slice(next());
                 v.sort_stable_in(&mut scratch, |a, b| a.0.cmp(&b.0));
-                v.first().map_or(0, |pair| u64::from(pair.1))
+                v.first().map_or(0, |pair| u64::from(pair.0))
             },
         );
         let mut small = block::<(u32, u32)>(256);
@@ -333,23 +361,17 @@ fn sort() {
             size,
             || {
                 let mut v = Vector::new(&mut memory[..]);
-                let _ = v.extend_from_slice(&input);
+                let _ = v.extend_from_slice(next());
                 v.sort_stable_in(&mut small, |a, b| a.0.cmp(&b.0));
-                v.first().map_or(0, |pair| u64::from(pair.1))
+                v.first().map_or(0, |pair| u64::from(pair.0))
             },
         );
-        bench(&group, "slice sort_unstable_by_key", size, || {
-            let mut v = Vector::new(&mut memory[..]);
-            let _ = v.extend_from_slice(&input);
-            v.sort_unstable_by_key(|pair| pair.0);
-            v.first().map_or(0, |pair| u64::from(pair.0))
-        });
         let mut std_v = Vec::with_capacity(size);
         bench(&group, "std sort_by_key (allocates)", size, || {
             std_v.clear();
-            std_v.extend_from_slice(&input);
+            std_v.extend_from_slice(next());
             std_v.sort_by_key(|pair| pair.0);
-            std_v.first().map_or(0, |pair| u64::from(pair.1))
+            std_v.first().map_or(0, |pair| u64::from(pair.0))
         });
     }
 }

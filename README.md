@@ -82,15 +82,18 @@ fixed storage the cost is the same without the word.
 | `Traversal` breadth first | O(nodes + edges reached) | flood fill, tiles within N moves, fewest steps |
 | `Traversal` depth first | O(nodes + edges reached), no recursion | reachability, dependency walks, maze generation |
 | `Traversal` topological order | O(nodes + edges) | build orders, tech trees, system update order |
+| `sort::unstable` (quicksort) | O(n log n) worst case, O(n) sorted, no memory | draw-call order, depth sorting, sorting before `dedup` or binary search; same result on every machine |
+| `sort::stable`, `stable_in` (merge sort) | O(n log n) comparisons; moves O(n log² n) without scratch, O(n log n) with n / 2 | ordering by one field while keeping an earlier order: UI lists, sorting by layer after sorting by name |
 
 Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
 
 | Structure | Algorithm | Cost |
 |---|---|---|
 | `Vector` | `retain`, `dedup` | O(n) |
-| `Vector` | `sort_stable` (in place, no memory) | O(n log n) comparisons, O(n log² n) moves; O(n) when sorted |
-| `Vector` | `sort_stable_in` (scratch from the caller) | O(n log n) with n / 2 scratch |
-| `Vector` | slice `sort_unstable`, `binary_search`, `select_nth_unstable` | O(n log n), O(log n), O(n) |
+| `Vector`, any slice | `sort_unstable` / `sort::unstable` (quicksort, no memory, never panics) | O(n log n) worst case; O(n) when sorted or reversed; O(n log k) for k distinct keys |
+| `Vector`, any slice | `sort_stable` / `sort::stable` (merge sort, no memory) | O(n log n) comparisons, O(n log² n) moves; O(n) when sorted |
+| `Vector`, any slice | `sort_stable_in` / `sort::stable_in` (scratch from the caller) | O(n log n) with n / 2 scratch |
+| `Vector` | slice `binary_search`, `select_nth_unstable` | O(log n), O(n) |
 | `Deque` | `retain`; `make_contiguous` | O(n); O(capacity) when wrapped |
 | `Pool`, `Map` | `retain` | O(capacity) |
 | `OrderedMap`, `Heap` | `retain` | O(n) |
@@ -105,6 +108,7 @@ Algorithms so far:
 - `Rng`: seedable pseudo-random number generator
 - `PathFinder`: A* / Dijkstra shortest path
 - `Traversal`: breadth first, depth first, topological order over graphs and grids
+- `sort`: quicksort and stable merge sort on any slice; never panic, no allocation
 
 Runnable samples for every structure are in [examples](examples); run one
 with `cargo run --example containers` (or `arena`, `hierarchy`, `pathfinding`,

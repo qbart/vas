@@ -24,7 +24,7 @@ pub mod orthtree;
 pub mod path;
 pub mod pool;
 pub mod random;
-mod sort;
+pub mod sort;
 pub mod spatial_grid;
 pub mod static_graph;
 pub mod storage;

@@ -164,6 +164,16 @@
 - [x] `docs/algorithms.md`: which algorithm lives on which structure, and why some are left out
 - [x] Complexity table in `README.md`, kept up to date by rule 13
 
+## 0.31.0 — vas's own sorts
+
+- [x] `vas::sort`: `unstable`, `unstable_by`, `unstable_by_key` (quicksort) and `stable`, `stable_by`, `stable_by_key`, `stable_in` (merge sort) on any slice
+- [x] `Vector::sort_unstable*` are vas's quicksort, not the slice's
+- [x] Never panic on a comparison that is not a total order; same order of equal elements on every compiler and target (pinned by a test)
+- [x] Quicksort: branch-free Lomuto partition, pseudo-median pivot, equal-pivot skipping, heapsort after 2 log₂ n partitions
+- [x] Short slices sorted without branches: sorting network of four, merges from both ends with a 512-byte stack buffer
+- [x] As fast as `core`'s `sort_unstable`; the stable sort gains from the same short-slice sort (30 to 22 ns per element at 100k with scratch)
+- [x] Sort benchmarks rotate between 8 inputs, so the branch predictor cannot learn one
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -174,7 +184,7 @@
 
 ## Later
 
-- [ ] Faster stable sort: `sort_stable_in` is about 7x slower than std's driftsort at 100,000 elements
+- [ ] Faster stable sort: `sort_stable_in` is 2x to 4.5x slower than std's driftsort at 100,000 elements (detecting existing runs would help)
 
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)

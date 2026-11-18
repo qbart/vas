@@ -8,8 +8,9 @@ in memory the caller passes in.
 
 | Structure | Algorithms | Spec |
 |---|---|---|
-| `Vector` | `retain`, `retain_mut`, `dedup*`, `sort_stable*` (in place, no memory); every slice algorithm through `Deref`: `sort_unstable`, `binary_search`, `select_nth_unstable`, `reverse`, `rotate`, `contains` | [vector](vector.md) |
-| `Deque` | `retain`, `retain_mut`, `make_contiguous` (then any slice algorithm) | [deque](deque.md) |
+| `Vector` | `retain`, `retain_mut`, `dedup*`; vas's own `sort_unstable*` (quicksort) and `sort_stable*` (merge sort), in place, no memory; slice algorithms through `Deref`: `binary_search`, `select_nth_unstable`, `reverse`, `rotate`, `contains` | [vector](vector.md), [sort](sort.md) |
+| any slice | `vas::sort::{unstable, stable, stable_in}` and their `_by` / `_by_key` forms | [sort](sort.md) |
+| `Deque` | `retain`, `retain_mut`, `make_contiguous` (then `vas::sort` or any slice algorithm) | [deque](deque.md) |
 | `Pool` | `retain` | [pool](pool.md) |
 | `Map` | `retain` | [map](map.md) |
 | `OrderedMap` | `retain`; lookups, nearest key and ranges are binary searches | [ordered map](ordered_map.md) |
@@ -46,32 +47,11 @@ a second, because closing a hole right away can pull an entry that was
 already visited (from the start of the block, around the end) into a slot
 that was not.
 
-## Stable sort
+## Sorting
 
-`Vector::sort_stable*` needs no memory: runs of 16 are sorted by insertion,
-then merged pairwise in place by rotations (split the longer run in the
-middle, binary-search where that element belongs in the other, rotate the
-two middle pieces past each other, repeat on both sides). O(n log n)
-comparisons, O(n log² n) moves, O(log n) stack. Already sorted input takes
-O(n).
-
-`sort_stable_in(scratch, cmp)` takes scratch memory of any size from the
-caller. A merge whose shorter run fits in it moves that run out and merges
-back in one pass, with no branch on the comparison; a merge that does not
-fit falls back to rotations and its pieces are tried again. With room for
-half the elements every merge is buffered.
-
-Measured on 8-byte elements with random keys (ns per element, see
-[benchmarks](benchmarks.md)):
-
-| | 1,000 | 100,000 |
-|---|---:|---:|
-| `sort_stable_by_key`, no memory | 32 | 109 |
-| `sort_stable_in`, 256 elements of scratch | 12 | 34 |
-| `sort_stable_in`, n / 2 of scratch | 11.5 | 30 |
-| slice `sort_unstable_by_key` | 5 | 4 |
-| std `sort_by_key` (allocates n / 2) | 4.5 | 4.5 |
-
-std's stable sort (driftsort) is a far more elaborate algorithm; use the
-slice's `sort_unstable` when equal elements may change order, it is as
-fast and needs no memory.
+`vas::sort` has a quicksort (`unstable*`) and a merge sort (`stable*`,
+`stable_in`), vas's own rather than `core`'s: they never panic, even on a
+comparison that is not a total order, and the unstable one puts equal
+elements in the same order on every compiler and target. The quicksort is
+as fast as `core`'s; the stable sort is 1.5x to 4.5x slower than std's,
+which allocates. See [sort](sort.md).

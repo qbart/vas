@@ -461,24 +461,52 @@ impl<T, S: Storage<T>> Vector<T, S> {
         self.truncate(kept);
     }
 
+    /// Sorts the elements; equal elements may change order. vas's own
+    /// quicksort, not the slice's: it never panics, also on a comparison
+    /// that is not a total order, and puts equal elements in the same order
+    /// on every compiler and target. O(n log n) worst case, O(n) on sorted
+    /// or reversed input, no memory. See [`sort`](crate::sort).
+    #[inline]
+    pub fn sort_unstable(&mut self)
+    where
+        T: Ord,
+    {
+        sort::unstable(self.as_mut_slice());
+    }
+
+    /// Sorts the elements by `compare`; equal elements may change order.
+    /// See [`sort_unstable`](Self::sort_unstable).
+    #[inline]
+    pub fn sort_unstable_by(&mut self, compare: impl FnMut(&T, &T) -> Ordering) {
+        sort::unstable_by(self.as_mut_slice(), compare);
+    }
+
+    /// Sorts the elements by the key `key` gives; elements with equal keys
+    /// may change order. The key is computed on every comparison. See
+    /// [`sort_unstable`](Self::sort_unstable).
+    #[inline]
+    pub fn sort_unstable_by_key<K: Ord>(&mut self, key: impl FnMut(&T) -> K) {
+        sort::unstable_by_key(self.as_mut_slice(), key);
+    }
+
     /// Sorts the elements, keeping equal elements in their order. Needs no
     /// memory; O(n log n) comparisons and O(n log² n) moves.
     ///
-    /// `sort_unstable` (from the slice) is faster when the order of equal
-    /// elements does not matter.
+    /// [`sort_unstable`](Self::sort_unstable) is faster when the order of
+    /// equal elements does not matter.
     #[inline]
     pub fn sort_stable(&mut self)
     where
         T: Ord,
     {
-        sort::stable(self.as_mut_slice(), &mut [], &mut |a: &T, b: &T| a < b);
+        sort::stable(self.as_mut_slice());
     }
 
     /// Sorts the elements by `compare`, keeping equal elements in their
     /// order. See [`sort_stable`](Self::sort_stable).
     #[inline]
     pub fn sort_stable_by(&mut self, compare: impl FnMut(&T, &T) -> Ordering) {
-        sort::stable(self.as_mut_slice(), &mut [], &mut sort::by(compare));
+        sort::stable_by(self.as_mut_slice(), compare);
     }
 
     /// Sorts the elements by `compare`, keeping equal elements in their
@@ -495,17 +523,15 @@ impl<T, S: Storage<T>> Vector<T, S> {
         scratch: &mut [MaybeUninit<T>],
         compare: impl FnMut(&T, &T) -> Ordering,
     ) {
-        sort::stable(self.as_mut_slice(), scratch, &mut sort::by(compare));
+        sort::stable_in(self.as_mut_slice(), scratch, compare);
     }
 
     /// Sorts the elements by the key `key` gives, keeping elements with
     /// equal keys in their order. The key is computed on every comparison.
     /// See [`sort_stable`](Self::sort_stable).
     #[inline]
-    pub fn sort_stable_by_key<K: Ord>(&mut self, mut key: impl FnMut(&T) -> K) {
-        sort::stable(self.as_mut_slice(), &mut [], &mut |a: &T, b: &T| {
-            key(a) < key(b)
-        });
+    pub fn sort_stable_by_key<K: Ord>(&mut self, key: impl FnMut(&T) -> K) {
+        sort::stable_by_key(self.as_mut_slice(), key);
     }
 
     /// The contents as one contiguous slice.
