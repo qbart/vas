@@ -17,6 +17,7 @@ in memory the caller passes in.
 | `OrderedMap` | `retain`; lookups, nearest key and ranges are binary searches | [ordered map](ordered_map.md) |
 | `TreeMap` | `retain`; nearest key and ranges | [tree map](tree_map.md) |
 | `Heap` | `retain` (rebuilds the heap in O(n)) | [heap](heap.md) |
+| `UnionFind` | `union`, `same`, `find`, `set_size`: union by size, path halving | [union-find](union_find.md) |
 | `Bitset` | `union_with`, `intersect_with`, `difference_with`, `first_set`, `first_clear`, `count` | [bitset](bitset.md) |
 | `Tree` | depth first (`descendants`), `post_order`, `breadth_first_into`, `common_ancestor`, `ancestors`, `depth` | [tree](tree.md) |
 | `BinaryTree` | `pre_order`, `in_order`, `post_order`, `level_order_into`, `common_ancestor`, `height`, `depth` | [binary tree](binary_tree.md) |

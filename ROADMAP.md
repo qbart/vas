@@ -199,7 +199,8 @@
 
 ## 0.36.0 — union-find
 
-- [ ] Disjoint sets with path compression and union by size
+- [x] `UnionFind`: disjoint sets with union by size and path halving, no recursion
+- [x] `root` for shared (`&self`) lookups without path changes
 
 ## 0.37.0 — fixed-capacity string
 

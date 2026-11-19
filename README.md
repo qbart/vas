@@ -41,6 +41,7 @@ feature `Pool<T, Dynamic>` grows on the heap.
 - `Deque`: double-ended queue (ring buffer)
 - `Heap`: priority queue
 - `Bitset`: set of bits
+- `UnionFind`: disjoint sets, joined in nearly O(1)
 - `Tree`: hierarchy (parent / children / siblings)
 - `BinaryTree`: binary tree
 - `Graph`: directed graph
@@ -69,6 +70,7 @@ fixed storage the cost is the same without the word.
 | `Deque` | push either end O(1) amortised | pop either end O(1) | by index O(1) | O(n) | input buffers, command queues, last-N history (`push_overwrite`) |
 | `Heap` | O(log n) | pop top O(log n) | top O(1) | O(n), heap order | priority queues: scheduling, AI tasks, event timers |
 | `Bitset` | set bit O(1) | clear bit O(1) | test bit O(1); first set / clear O(c / 64) | O(c / 64) | visibility flags, fog of war, component masks |
+| `UnionFind` | add O(1); `union` ~O(1) amortised | no (sets only join) | `same`, `find` ~O(1) amortised | no | maze and dungeon generation, islands and regions, Kruskal's spanning tree |
 | `Tree` | O(1) | node and subtree O(subtree) | by id O(1); depth O(d) | O(n) | scene graphs, UI hierarchies, skeletons |
 | `BinaryTree` | O(1) at a free child | node and subtree O(subtree) | by id O(1); depth O(d) | pre / in / post order O(n) | decision trees, expression trees, BSP |
 | `Graph` | node, edge O(1) | edge O(1); node O(edges at it) | node, edge O(1); `find_edge` O(out-degree) | O(c) | road networks, quest and dialogue graphs, editable navigation |

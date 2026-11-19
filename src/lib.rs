@@ -34,6 +34,7 @@ pub mod storage;
 pub mod traversal;
 pub mod tree;
 pub mod tree_map;
+pub mod union_find;
 pub mod vector;
 
 pub use aabb::Aabb;
@@ -68,4 +69,5 @@ pub use storage::{Borrowed, Dynamic, Inline};
 pub use traversal::Traversal;
 pub use tree::Tree;
 pub use tree_map::TreeMap;
+pub use union_find::UnionFind;
 pub use vector::Vector;
