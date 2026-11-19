@@ -15,7 +15,7 @@ use vas::hash::FastState;
 use vas::path::Space;
 use vas::{
     Aabb, Bitset, Deque, FlowField, Heap, KdTree, Map, OrderedMap, PathFinder, Pool, Quadtree, Rng,
-    SpatialGrid, TreeMap, Vector,
+    SparseSet, SpatialGrid, TreeMap, Vector,
 };
 
 const RUNS: usize = 15;
@@ -839,6 +839,101 @@ fn path() {
     );
 }
 
+/// Entity ids below 100,000, 10,000 of them: a component store.
+fn sparse_set() {
+    const IDS: u32 = 100_000;
+    const N: usize = 10_000;
+    let mut rng = Rng::new(12);
+    let mut input: Vec<u32> = (0..IDS).collect();
+    rng.shuffle(&mut input);
+    input.truncate(N);
+    let mut lookups = input.clone();
+    rng.shuffle(&mut lookups);
+
+    let mut sparse = block::<u32>(IDS as usize);
+    let mut ids = block::<u32>(N);
+    let mut values = block::<u64>(N);
+    let mut set = SparseSet::new(&mut sparse[..], &mut ids[..], &mut values[..]);
+    bench(
+        "components 10k of 100k ids: insert",
+        "vas::SparseSet",
+        N,
+        || {
+            set.clear();
+            for id in &input {
+                let _ = set.insert(*id, u64::from(*id));
+            }
+            set.len() as u64
+        },
+    );
+    let mut memory = block::<vas::map::Slot<u32, u64>>(2 * N);
+    let mut tags = block::<u8>(2 * N);
+    let mut map = Map::new(&mut memory[..], &mut tags[..]);
+    bench(
+        "components 10k of 100k ids: insert",
+        "vas::Map (50% full)",
+        N,
+        || {
+            map.clear();
+            for id in &input {
+                let _ = map.insert(*id, u64::from(*id));
+            }
+            map.len() as u64
+        },
+    );
+    let mut hash = HashMap::with_capacity_and_hasher(N, FastState::default());
+    bench(
+        "components 10k of 100k ids: insert",
+        "std HashMap + vas FastHasher",
+        N,
+        || {
+            hash.clear();
+            for id in &input {
+                hash.insert(*id, u64::from(*id));
+            }
+            hash.len() as u64
+        },
+    );
+
+    bench(
+        "components 10k of 100k ids: get",
+        "vas::SparseSet",
+        N,
+        || lookups.iter().filter_map(|id| set.get(*id)).sum(),
+    );
+    bench(
+        "components 10k of 100k ids: get",
+        "vas::Map (50% full)",
+        N,
+        || lookups.iter().filter_map(|id| map.get(id)).sum(),
+    );
+    bench(
+        "components 10k of 100k ids: get",
+        "std HashMap + vas FastHasher",
+        N,
+        || lookups.iter().filter_map(|id| hash.get(id)).sum(),
+    );
+
+    bench(
+        "components 10k of 100k ids: iterate",
+        "vas::SparseSet",
+        N,
+        || set.values().iter().sum(),
+    );
+    bench(
+        "components 10k of 100k ids: iterate",
+        "vas::Map (50% full)",
+        N,
+        || map.iter().map(|(_, value)| *value).sum(),
+    );
+    bench(
+        "components 10k of 100k ids: iterate",
+        "std HashMap + vas FastHasher",
+        N,
+        || hash.values().sum(),
+    );
+}
+
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -860,4 +955,5 @@ fn main() {
     random();
     spatial();
     path();
+    sparse_set();
 }

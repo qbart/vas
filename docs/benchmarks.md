@@ -91,6 +91,10 @@ than the hand-written `Space` (bounds checks through `offset`, the cost
 closure); a whole-map `FlowField` takes 0.7 ms, a field of view of radius
 64 from the centre 0.7 µs, and a line of sight 10 ns.
 
+**Sparse set.** With 10,000 entities among ids below 100,000, `SparseSet`
+looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
+`HashMap`, and walks its values 4x faster, as one packed slice.
+
 ### Results
 
 | Case | Implementation | ns / op |
@@ -213,6 +217,15 @@ closure); a whole-map `FlowField` takes 0.7 ms, a field of view of radius
 | 128x128 grid, flow field to a corner | vas::FlowField build | 669769.0 |
 | 128x128 grid, field of view radius 64 | vas::Grid::field_of_view | 721.0 |
 | 128x128 grid, line of sight | vas::Grid::line_of_sight | 10.5 |
+| components 10k of 100k ids: insert | vas::SparseSet | 1.8 |
+| components 10k of 100k ids: insert | vas::Map (50% full) | 2.9 |
+| components 10k of 100k ids: insert | std HashMap + vas FastHasher | 2.7 |
+| components 10k of 100k ids: get | vas::SparseSet | 0.6 |
+| components 10k of 100k ids: get | vas::Map (50% full) | 2.4 |
+| components 10k of 100k ids: get | std HashMap + vas FastHasher | 1.4 |
+| components 10k of 100k ids: iterate | vas::SparseSet | 0.1 |
+| components 10k of 100k ids: iterate | vas::Map (50% full) | 0.7 |
+| components 10k of 100k ids: iterate | std HashMap + vas FastHasher | 0.4 |
 
 ## Against other crates
 

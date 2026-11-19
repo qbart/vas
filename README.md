@@ -35,6 +35,7 @@ feature `Pool<T, Dynamic>` grows on the heap.
 - `Vector`: contiguous vector
 - `Pool`: store with generational handles
 - `Map`: unordered map
+- `SparseSet`: values by `u32` id, packed in one slice (ECS component store)
 - `OrderedMap`: map sorted by key (sorted block; small or mostly read)
 - `TreeMap`: map sorted by key (red-black tree; large and changing)
 - `Deque`: double-ended queue (ring buffer)
@@ -62,6 +63,7 @@ fixed storage the cost is the same without the word.
 | `Vector` | push O(1) amortised, insert at i O(n) | pop, `swap_remove` O(1); remove at i O(n) | by index O(1); `binary_search` on sorted O(log n) | O(n), contiguous | particles, draw lists, anything walked every frame |
 | `Pool` | O(1) | O(1) | by handle O(1), stale handles detected | O(c) | entities, bullets, sounds: anything referred to by id |
 | `Map` | O(1) average | O(1) average | O(1) average | O(c) | id to entity, name to asset, tile to state |
+| `SparseSet` | O(1) | O(1) (last value moves in) | by id O(1), no hashing | O(n), one packed slice | ECS components by entity id, per-entity state walked every frame |
 | `OrderedMap` | O(n) (shifts) | O(n) (shifts); `pop_last` O(1) | O(log n); nearest key, range start O(log n) | O(n), contiguous | keyframes, timed events, small sorted tables read every frame |
 | `TreeMap` | O(log n) | O(log n) | O(log n); nearest key, range start O(log n) | O(n), follows links | large sorted sets that change often: event queues with cancel, score boards |
 | `Deque` | push either end O(1) amortised | pop either end O(1) | by index O(1) | O(n) | input buffers, command queues, last-N history (`push_overwrite`) |
@@ -103,6 +105,7 @@ Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
 | `Vector` | slice `binary_search`, `select_nth_unstable` | O(log n), O(n) |
 | `Deque` | `retain`; `make_contiguous` | O(n); O(capacity) when wrapped |
 | `Pool`, `Map` | `retain` | O(capacity) |
+| `SparseSet` | `retain` | O(n) |
 | `OrderedMap`, `Heap` | `retain` | O(n) |
 | `TreeMap` | `retain` | O(n log n) |
 | `Tree` | `post_order`, `breadth_first_into` | O(subtree) |

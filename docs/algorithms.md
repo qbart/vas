@@ -13,6 +13,7 @@ in memory the caller passes in.
 | `Deque` | `retain`, `retain_mut`, `make_contiguous` (then `vas::sort` or any slice algorithm) | [deque](deque.md) |
 | `Pool` | `retain` | [pool](pool.md) |
 | `Map` | `retain` | [map](map.md) |
+| `SparseSet` | `retain` | [sparse set](sparse_set.md) |
 | `OrderedMap` | `retain`; lookups, nearest key and ranges are binary searches | [ordered map](ordered_map.md) |
 | `TreeMap` | `retain`; nearest key and ranges | [tree map](tree_map.md) |
 | `Heap` | `retain` (rebuilds the heap in O(n)) | [heap](heap.md) |
@@ -43,6 +44,7 @@ and ids go stale. A panic in `keep` leaves the structure valid.
 | `Pool` | O(capacity) | slot order |
 | `Map` | O(capacity) | no particular order |
 | `Heap` | O(n) | no particular order |
+| `SparseSet` | O(n) | dense order |
 
 `Map::retain` marks the rejected slots in one pass and closes the holes in
 a second, because closing a hole right away can pull an entry that was

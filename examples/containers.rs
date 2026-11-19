@@ -4,7 +4,7 @@ use std::error::Error;
 
 use vas::bitset::words;
 use vas::pool::Slot;
-use vas::{Bitset, Deque, Heap, Inline, Map, Memory, OrderedMap, Pool, Rng, Vector};
+use vas::{Bitset, Deque, Heap, Inline, Map, Memory, OrderedMap, Pool, Rng, SparseSet, Vector};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Vector: a contiguous block, e.g. vertices to hand to a renderer.
@@ -60,6 +60,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut items = Map::new(&mut memory, &mut tags);
     items.insert(7, "sword")?;
     assert_eq!(items.get(&7), Some(&"sword"));
+
+    // SparseSet: components by entity id, packed for fast iteration.
+    let mut sparse = Memory::<u32, 1024>::new(); // entity ids below 1024
+    let mut ids = Memory::<u32, 64>::new();
+    let mut values = Memory::<f32, 64>::new();
+    let mut health = SparseSet::new(&mut sparse, &mut ids, &mut values);
+    health.insert(900, 100.0)?;
+    health.insert(3, 40.0)?;
+    for hp in health.values_mut() {
+        *hp -= 10.0; // a tight loop over 2 values
+    }
+    assert_eq!(health.get(3), Some(&30.0));
 
     // OrderedMap: sorted keys, nearest-key lookups.
     let mut memory = Memory::<(u32, &str), 16>::new();
