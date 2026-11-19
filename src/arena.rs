@@ -2,7 +2,9 @@
 
 #![allow(unsafe_code)]
 
-use core::cell::{Cell, UnsafeCell};
+use core::cell::Cell;
+#[cfg(target_has_atomic = "8")]
+use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
 use core::mem::ManuallyDrop;

@@ -23,7 +23,14 @@ fn block<T>(capacity: usize) -> Vec<MaybeUninit<T>> {
 }
 
 /// Runs `work` several times and prints the fastest run per operation.
+///
+/// `cargo run --release -- queue` only runs the cases whose name contains
+/// `queue`.
 fn bench(group: &str, name: &str, operations: usize, mut work: impl FnMut() -> u64) {
+    let filter = std::env::args().skip(1).find(|arg| !arg.starts_with('-'));
+    if filter.is_some_and(|filter| !group.contains(&filter)) {
+        return;
+    }
     let mut best = f64::INFINITY;
     let mut check = 0;
     for _ in 0..RUNS {
@@ -537,6 +544,84 @@ fn lru() {
     });
 }
 
+/// Moves `0..total` from `threads` producers to `threads` consumers. Each
+/// producer then pushes one `u64::MAX`, and each consumer stops at the
+/// first one it takes: with a FIFO queue all values come before the last.
+fn exchange(
+    threads: usize,
+    total: usize,
+    push: impl Fn(u64) -> bool + Sync,
+    pop: impl Fn() -> Option<u64> + Sync,
+) -> u64 {
+    let per = (total / threads) as u64;
+    let sum = std::sync::atomic::AtomicU64::new(0);
+    std::thread::scope(|scope| {
+        for producer in 0..threads as u64 {
+            let push = &push;
+            scope.spawn(move || {
+                for value in (producer * per..(producer + 1) * per).chain([u64::MAX]) {
+                    while !push(value) {
+                        std::hint::spin_loop();
+                    }
+                }
+            });
+        }
+        for _ in 0..threads {
+            scope.spawn(|| {
+                let mut local = 0u64;
+                loop {
+                    match pop() {
+                        Some(u64::MAX) => break,
+                        Some(value) => local = local.wrapping_add(value),
+                        None => std::hint::spin_loop(),
+                    }
+                }
+                sum.fetch_add(local, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+    });
+    sum.into_inner()
+}
+
+/// The bounded MPMC queue against `crossbeam_queue::ArrayQueue`.
+fn queue() {
+    use vas::sync::{Queue, Slot};
+    const CAPACITY: usize = 1024;
+    const N: usize = 1 << 20;
+    let mut slots = block::<Slot<u64>>(CAPACITY);
+    let queue = Queue::new(&mut slots[..]);
+    let array = crossbeam_queue::ArrayQueue::new(CAPACITY);
+
+    let group = "queue, one thread: push then pop";
+    bench(group, "vas::sync::Queue", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = queue.push(i);
+                queue.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "crossbeam ArrayQueue", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = array.push(i);
+                array.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+
+    const MOVED: usize = 1 << 18;
+    for threads in [1, 2, 4, 8] {
+        let group = format!("queue, {threads} producers + {threads} consumers, 1024 slots");
+        bench(&group, "vas::sync::Queue", MOVED, || {
+            exchange(threads, MOVED, |v| queue.push(v).is_ok(), || queue.pop())
+        });
+        bench(&group, "crossbeam ArrayQueue", MOVED, || {
+            exchange(threads, MOVED, |v| array.push(v).is_ok(), || array.pop())
+        });
+    }
+}
+
 fn run() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -558,6 +643,7 @@ fn run() {
     spatial();
     path();
     lru();
+    queue();
 }
 
 fn main() {

@@ -34,6 +34,7 @@ pub mod spatial_grid;
 pub mod static_graph;
 pub mod storage;
 pub mod string;
+pub mod sync;
 pub mod traversal;
 pub mod tree;
 pub mod tree_map;

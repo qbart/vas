@@ -1005,6 +1005,94 @@ fn search() {
     });
 }
 
+/// Moves `0..total` from `threads` producers to `threads` consumers. Each
+/// producer then pushes one `u64::MAX`, and each consumer stops at the
+/// first one it takes: with a FIFO queue all values come before the last.
+fn exchange(
+    threads: usize,
+    total: usize,
+    push: impl Fn(u64) -> bool + Sync,
+    pop: impl Fn() -> Option<u64> + Sync,
+) -> u64 {
+    let per = (total / threads) as u64;
+    let sum = std::sync::atomic::AtomicU64::new(0);
+    std::thread::scope(|scope| {
+        for producer in 0..threads as u64 {
+            let push = &push;
+            scope.spawn(move || {
+                for value in (producer * per..(producer + 1) * per).chain([u64::MAX]) {
+                    while !push(value) {
+                        std::hint::spin_loop();
+                    }
+                }
+            });
+        }
+        for _ in 0..threads {
+            scope.spawn(|| {
+                let mut local = 0u64;
+                loop {
+                    match pop() {
+                        Some(u64::MAX) => break,
+                        Some(value) => local = local.wrapping_add(value),
+                        None => std::hint::spin_loop(),
+                    }
+                }
+                sum.fetch_add(local, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+    });
+    sum.into_inner()
+}
+
+/// The bounded MPMC queue against a `Mutex<VecDeque>` of the same capacity.
+fn queue() {
+    use std::sync::Mutex;
+    use vas::sync::{Queue, Slot};
+    const CAPACITY: usize = 1024;
+    const N: usize = 1 << 20;
+    let mut slots = block::<Slot<u64>>(CAPACITY);
+    let queue = Queue::new(&mut slots[..]);
+    let locked = Mutex::new(VecDeque::with_capacity(CAPACITY));
+    let locked_push = |value: u64| {
+        locked.lock().is_ok_and(|mut q| {
+            q.len() < CAPACITY && {
+                q.push_back(value);
+                true
+            }
+        })
+    };
+    let locked_pop = || locked.lock().ok().and_then(|mut q| q.pop_front());
+
+    let group = "queue, one thread: push then pop";
+    bench(group, "vas::sync::Queue", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = queue.push(i);
+                queue.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "Mutex<VecDeque>", N, || {
+        (0..N as u64)
+            .map(|i| {
+                locked_push(i);
+                locked_pop().unwrap_or(0)
+            })
+            .sum()
+    });
+
+    const MOVED: usize = 1 << 18;
+    for threads in [1, 2, 4, 8] {
+        let group = format!("queue, {threads} producers + {threads} consumers, 1024 slots");
+        bench(&group, "vas::sync::Queue", MOVED, || {
+            exchange(threads, MOVED, |v| queue.push(v).is_ok(), || queue.pop())
+        });
+        bench(&group, "Mutex<VecDeque>", MOVED, || {
+            exchange(threads, MOVED, locked_push, locked_pop)
+        });
+    }
+}
+
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -1029,4 +1117,5 @@ fn main() {
     path();
     sparse_set();
     lru();
+    queue();
 }

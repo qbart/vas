@@ -1,4 +1,4 @@
-.PHONY: build release test lint fmt doc examples check miri bench bench-crates publish clean
+.PHONY: build release test lint fmt doc examples check miri tsan bench bench-crates publish clean
 
 build:
 	cargo build
@@ -29,6 +29,15 @@ check: lint test examples doc
 miri:
 	cargo +nightly miri test --all-features --lib --tests
 	MIRIFLAGS=-Zmiri-ignore-leaks cargo +nightly miri test --all-features --doc
+
+# ThreadSanitizer on the tests that use threads. Needs nightly with
+# `rust-src`; any report fails the run.
+HOST := $(shell rustc -vV | sed -n 's/host: //p')
+THREADED_TESTS := --test queue --test arena
+
+tsan:
+	TSAN_OPTIONS=halt_on_error=1 RUSTFLAGS="-Zsanitizer=thread" CARGO_TARGET_DIR=target/tsan \
+		cargo +nightly test -Zbuild-std --target $(HOST) --all-features $(THREADED_TESTS)
 
 bench:
 	cargo bench --all-features

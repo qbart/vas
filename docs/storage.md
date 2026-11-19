@@ -127,6 +127,9 @@ The pieces live in `vas::storage`:
   both with `false`; `GROWS` says at compile time whether a buffer can
   grow at all.
 - `IntoBuffer<T>`: what `new` accepts.
+- `Fixed<T>`: storage of a fixed size, `Borrowed` and `Inline` only (sealed).
+  The containers shared between threads in `vas::sync` take only these,
+  because growing would move elements other threads are using.
 
 Costs of the parameter:
 

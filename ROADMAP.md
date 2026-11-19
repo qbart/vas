@@ -228,9 +228,10 @@
 
 ## 0.41.0 — concurrent queue
 
-- [ ] `vas::sync::CachePadded`
-- [ ] `vas::sync::Queue`: bounded MPMC queue (Vyukov), `Borrowed` and `Inline`
-- [ ] Concurrency checks: Miri with threads, ThreadSanitizer (`make tsan`)
+- [x] `vas::sync::CachePadded`
+- [x] `vas::sync::Queue`: bounded MPMC queue (Vyukov), `Borrowed` and `Inline`; level with `crossbeam`'s `ArrayQueue` on one thread, 1.1x to 5x faster under contention
+- [x] `storage::Fixed`: the sealed bound for `Borrowed` and `Inline`
+- [x] Concurrency checks: Miri with threads, ThreadSanitizer (`make tsan`, in CI)
 
 ## 0.42.0 — work-stealing deque
 

@@ -29,3 +29,12 @@ jobs:
       - run: cargo miri test --all-features --doc
         env:
           MIRIFLAGS: -Zmiri-ignore-leaks
+
+  tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+      - run: make tsan

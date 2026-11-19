@@ -41,6 +41,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `SpatialGrid` radius query | brute force | about 50x faster |
 | `Quadtree` radius query | brute force | about 13x faster |
 | `KdTree` nearest | brute force | about 19x faster |
+| `sync::Queue`, one thread | `Mutex<VecDeque>` | 2x faster |
+| `sync::Queue`, 1 to 8 producers and as many consumers | `Mutex<VecDeque>` | 1.8x to 17x faster |
 
 ### What the numbers say
 
@@ -233,6 +235,16 @@ looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 | components 10k of 100k ids: iterate | vas::Map (50% full) | 0.7 |
 | components 10k of 100k ids: iterate | std HashMap + vas FastHasher | 0.4 |
 | lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
+| queue, one thread: push then pop | vas::sync::Queue | 7.8 |
+| queue, one thread: push then pop | Mutex<VecDeque> | 16.2 |
+| queue, 1 producers + 1 consumers, 1024 slots | vas::sync::Queue | 19.0 |
+| queue, 1 producers + 1 consumers, 1024 slots | Mutex<VecDeque> | 101.9 |
+| queue, 2 producers + 2 consumers, 1024 slots | vas::sync::Queue | 12.2 |
+| queue, 2 producers + 2 consumers, 1024 slots | Mutex<VecDeque> | 155.3 |
+| queue, 4 producers + 4 consumers, 1024 slots | vas::sync::Queue | 17.2 |
+| queue, 4 producers + 4 consumers, 1024 slots | Mutex<VecDeque> | 298.2 |
+| queue, 8 producers + 8 consumers, 1024 slots | vas::sync::Queue | 173.3 |
+| queue, 8 producers + 8 consumers, 1024 slots | Mutex<VecDeque> | 315.3 |
 
 ## Against other crates
 
@@ -261,6 +273,7 @@ algorithms, so theirs differ).
 | `SpatialGrid` radius query | `rstar::RTree` | about 4.5x faster |
 | `PathFinder` | `pathfinding::astar` | about 1.2x faster |
 | `LruCache` | `lru::LruCache` with the same hasher | 1.3x slower (20 against 15 ns per get or insert); no allocation |
+| `sync::Queue` | `crossbeam_queue::ArrayQueue` | level on one thread; 1.1x to 5x faster with 1 to 8 producers and as many consumers |
 
 Notes:
 
@@ -276,6 +289,13 @@ Notes:
   is expected.
 - `pathfinding::astar` allocates its own bookkeeping on every call;
   `PathFinder` reuses the caller's memory.
+- The queue cases with threads are the noisiest here (20-50% between
+  runs): they time thread start-up and the scheduler too. The values are
+  nanoseconds per value moved, for the whole run. With 2 and 4 threads on
+  each side, vas waits a few bounded spins after losing a race (crossbeam
+  does too, differently); before vas did, it was 2x *slower* at 2+2. At
+  8+8 every thread hammers the same two counters and both queues spend
+  most of the time waiting on them.
 
 ### Results
 
@@ -332,3 +352,13 @@ Notes:
 | A* 128x128 grid, corner to corner | pathfinding::astar | 41999.0 |
 | lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
 | lru 1024 of 2048 keys: get, insert on a miss | lru::LruCache + vas FastHasher | 15.3 |
+| queue, one thread: push then pop | vas::sync::Queue | 7.8 |
+| queue, one thread: push then pop | crossbeam ArrayQueue | 7.7 |
+| queue, 1 producers + 1 consumers, 1024 slots | vas::sync::Queue | 19.1 |
+| queue, 1 producers + 1 consumers, 1024 slots | crossbeam ArrayQueue | 28.5 |
+| queue, 2 producers + 2 consumers, 1024 slots | vas::sync::Queue | 11.2 |
+| queue, 2 producers + 2 consumers, 1024 slots | crossbeam ArrayQueue | 41.1 |
+| queue, 4 producers + 4 consumers, 1024 slots | vas::sync::Queue | 18.6 |
+| queue, 4 producers + 4 consumers, 1024 slots | crossbeam ArrayQueue | 86.6 |
+| queue, 8 producers + 8 consumers, 1024 slots | vas::sync::Queue | 181.6 |
+| queue, 8 producers + 8 consumers, 1024 slots | crossbeam ArrayQueue | 199.1 |

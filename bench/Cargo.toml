@@ -13,6 +13,7 @@ publish = false
 
 [dependencies]
 arrayvec = "0.7.8"
+crossbeam-queue = "0.3.14"
 fastrand = "2.5.0"
 fixedbitset = "0.5.9"
 hashbrown = "0.17.1"

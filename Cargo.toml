@@ -1,6 +1,6 @@
 [package]
 name = "vas"
-version = "0.40.0"
+version = "0.41.0"
 edition = "2024"
 description = "A collection of data containers, structures and algorithms for game development focused on speed and memory control."
 license = "MIT"

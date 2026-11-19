@@ -201,6 +201,26 @@ pub struct Dynamic<A = Global>(pub A);
 #[derive(Clone, Copy, Default, Debug)]
 pub struct Dynamic<A>(pub A);
 
+/// Storage of a fixed size: [`Borrowed`] and [`Inline`], not [`Dynamic`].
+///
+/// Containers shared between threads (see [`crate::sync`]) take only these:
+/// their slots never move, so other threads can keep using them. The trait
+/// is sealed.
+pub trait Fixed<T>: Storage<T> + sealed::Fixed {}
+
+impl<T> Fixed<T> for Borrowed<'_> {}
+
+impl<T, const N: usize> Fixed<T> for Inline<N> {}
+
+mod sealed {
+    /// Keeps [`super::Fixed`] to the storage kinds of this crate.
+    pub trait Fixed {}
+
+    impl Fixed for super::Borrowed<'_> {}
+
+    impl<const N: usize> Fixed for super::Inline<N> {}
+}
+
 impl<T, A: Allocator> Storage<T> for Dynamic<A> {
     type Buffer = Allocation<T, A>;
 }
