@@ -235,7 +235,9 @@
 
 ## 0.42.0 — work-stealing deque
 
-- [ ] `vas::sync::StealDeque`: one owner (LIFO), many thieves (FIFO), `Worker` / `Stealer` handles that borrow it
+- [x] `vas::sync::StealDeque`: one owner (LIFO), many thieves (FIFO), `Worker` / `Stealer` handles that borrow it
+- [x] Thieves claim a position before reading it, and slot stamps keep the owner from overwriting a slot still being read: no racy read (the textbook algorithm has one)
+- [x] Level with `crossbeam_deque`; every ordering weakened in turn is caught by Miri
 
 ## Quality
 

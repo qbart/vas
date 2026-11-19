@@ -2,6 +2,9 @@
 //! work.
 //!
 //! - [`Queue`]: a bounded multi-producer, multi-consumer FIFO queue.
+//! - [`StealDeque`]: a work-stealing deque; its owner pushes and pops at
+//!   one end through a [`Worker`], other threads steal from the other end
+//!   through a [`Stealer`].
 //! - [`CachePadded`]: keeps a value on a cache line of its own.
 //!
 //! Like the rest of vas they never allocate and never block: memory comes
@@ -16,10 +19,14 @@
 mod padded;
 #[cfg(target_has_atomic = "ptr")]
 mod queue;
+#[cfg(target_has_atomic = "ptr")]
+mod steal_deque;
 
 pub use padded::CachePadded;
 #[cfg(target_has_atomic = "ptr")]
 pub use queue::Queue;
+#[cfg(target_has_atomic = "ptr")]
+pub use steal_deque::{Steal, StealDeque, Stealer, Worker};
 
 #[cfg(target_has_atomic = "ptr")]
 use core::cell::UnsafeCell;

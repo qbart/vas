@@ -58,6 +58,7 @@ Shared between threads (`vas::sync`, on targets with atomics). Fixed
 capacity (`Inline` or `Borrowed`), lock-free, never blocks:
 
 - `Queue`: bounded multi-producer, multi-consumer FIFO queue
+- `StealDeque`: work-stealing deque for job systems; one owner (`Worker`), any number of thieves (`Stealer`)
 - `CachePadded`: keeps a value on a cache line of its own
 
 ## Complexity
@@ -79,6 +80,7 @@ fixed storage the cost is the same without the word.
 | `TreeMap` | O(log n) | O(log n) | O(log n); nearest key, range start O(log n) | O(n), follows links | large sorted sets that change often: event queues with cancel, score boards |
 | `Deque` | push either end O(1) amortised | pop either end O(1) | by index O(1) | O(n) | input buffers, command queues, last-N history (`push_overwrite`) |
 | `sync::Queue` | push O(1), lock-free; `Full` at once when full | pop O(1), lock-free; `None` at once when empty | no | no (`len` is a snapshot) | jobs injected from any thread, IO completions, work handed to another thread |
+| `sync::StealDeque` | owner push O(1); `Full` at once when full | owner pop O(1), LIFO; steal O(1), FIFO, lock-free | no | no (`len` is a snapshot) | per-worker job queues in a job system: the owner runs its newest jobs, idle threads steal the oldest |
 | `Heap` | O(log n) | pop top O(log n) | top O(1) | O(n), heap order | priority queues: scheduling, AI tasks, event timers |
 | `Bitset` | set bit O(1) | clear bit O(1) | test bit O(1); first set / clear O(c / 64) | O(c / 64) | visibility flags, fog of war, component masks |
 | `UnionFind` | add O(1); `union` ~O(1) amortised | no (sets only join) | `same`, `find` ~O(1) amortised | no | maze and dungeon generation, islands and regions, Kruskal's spanning tree |

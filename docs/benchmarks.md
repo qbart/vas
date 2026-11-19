@@ -43,6 +43,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `KdTree` nearest | brute force | about 19x faster |
 | `sync::Queue`, one thread | `Mutex<VecDeque>` | 2x faster |
 | `sync::Queue`, 1 to 8 producers and as many consumers | `Mutex<VecDeque>` | 1.8x to 17x faster |
+| `sync::StealDeque`, owner alone | `Mutex<VecDeque>` | 2x faster |
+| `sync::StealDeque`, owner with 1 to 8 thieves | `Mutex<VecDeque>` | 2.6x to 5x faster |
 
 ### What the numbers say
 
@@ -245,6 +247,16 @@ looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 | queue, 4 producers + 4 consumers, 1024 slots | Mutex<VecDeque> | 298.2 |
 | queue, 8 producers + 8 consumers, 1024 slots | vas::sync::Queue | 173.3 |
 | queue, 8 producers + 8 consumers, 1024 slots | Mutex<VecDeque> | 315.3 |
+| work-stealing deque, owner alone: push then pop | vas::sync::StealDeque | 8.2 |
+| work-stealing deque, owner alone: push then pop | Mutex<VecDeque> | 16.0 |
+| work-stealing deque, owner pushes, 1 thieves steal, 1024 slots | vas::sync::StealDeque | 18.8 |
+| work-stealing deque, owner pushes, 1 thieves steal, 1024 slots | Mutex<VecDeque> | 66.3 |
+| work-stealing deque, owner pushes, 2 thieves steal, 1024 slots | vas::sync::StealDeque | 33.4 |
+| work-stealing deque, owner pushes, 2 thieves steal, 1024 slots | Mutex<VecDeque> | 118.2 |
+| work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | vas::sync::StealDeque | 106.6 |
+| work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | Mutex<VecDeque> | 274.7 |
+| work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | vas::sync::StealDeque | 154.5 |
+| work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | Mutex<VecDeque> | 801.6 |
 
 ## Against other crates
 
@@ -274,6 +286,7 @@ algorithms, so theirs differ).
 | `PathFinder` | `pathfinding::astar` | about 1.2x faster |
 | `LruCache` | `lru::LruCache` with the same hasher | 1.3x slower (20 against 15 ns per get or insert); no allocation |
 | `sync::Queue` | `crossbeam_queue::ArrayQueue` | level on one thread; 1.1x to 5x faster with 1 to 8 producers and as many consumers |
+| `sync::StealDeque` | `crossbeam_deque` (LIFO worker) | level: the same 8.2 ns alone, within noise with 1 to 8 thieves |
 
 Notes:
 
@@ -296,6 +309,10 @@ Notes:
   does too, differently); before vas did, it was 2x *slower* at 2+2. At
   8+8 every thread hammers the same two counters and both queues spend
   most of the time waiting on them.
+- `crossbeam_deque` grows instead of reporting full; the benchmark stops
+  pushing to it at 1024 values, the capacity of vas's deque. In the cases
+  with thieves the owner pushes everything, popping one itself whenever
+  the deque is full; nanoseconds are per value, for the whole run.
 
 ### Results
 
@@ -362,3 +379,13 @@ Notes:
 | queue, 4 producers + 4 consumers, 1024 slots | crossbeam ArrayQueue | 86.6 |
 | queue, 8 producers + 8 consumers, 1024 slots | vas::sync::Queue | 181.6 |
 | queue, 8 producers + 8 consumers, 1024 slots | crossbeam ArrayQueue | 199.1 |
+| work-stealing deque, owner alone: push then pop | vas::sync::StealDeque | 8.2 |
+| work-stealing deque, owner alone: push then pop | crossbeam_deque | 8.2 |
+| work-stealing deque, owner pushes, 1 thieves steal, 1024 slots | vas::sync::StealDeque | 15.1 |
+| work-stealing deque, owner pushes, 1 thieves steal, 1024 slots | crossbeam_deque | 24.1 |
+| work-stealing deque, owner pushes, 2 thieves steal, 1024 slots | vas::sync::StealDeque | 33.6 |
+| work-stealing deque, owner pushes, 2 thieves steal, 1024 slots | crossbeam_deque | 40.9 |
+| work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | vas::sync::StealDeque | 115.9 |
+| work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | crossbeam_deque | 103.7 |
+| work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | vas::sync::StealDeque | 159.5 |
+| work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | crossbeam_deque | 155.2 |

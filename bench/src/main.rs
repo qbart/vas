@@ -622,6 +622,108 @@ fn queue() {
     }
 }
 
+/// The owner pushes `0..total`, popping one itself whenever the deque is
+/// full, then pops what is left, while `thieves` threads steal. Returns the
+/// sum of every value taken, by anyone.
+fn steal_work(
+    thieves: usize,
+    total: u64,
+    push: impl Fn(u64) -> bool,
+    pop: impl Fn() -> Option<u64>,
+    steal: impl Fn() -> Option<u64> + Sync,
+) -> u64 {
+    let done = std::sync::atomic::AtomicBool::new(false);
+    let sum = std::sync::atomic::AtomicU64::new(0);
+    std::thread::scope(|scope| {
+        for _ in 0..thieves {
+            scope.spawn(|| {
+                let mut local = 0u64;
+                loop {
+                    match steal() {
+                        Some(value) => local = local.wrapping_add(value),
+                        None if done.load(std::sync::atomic::Ordering::Acquire) => break,
+                        None => std::hint::spin_loop(),
+                    }
+                }
+                sum.fetch_add(local, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+        let mut local = 0u64;
+        for value in 0..total {
+            while !push(value) {
+                local = local.wrapping_add(pop().unwrap_or(0));
+            }
+        }
+        while let Some(value) = pop() {
+            local = local.wrapping_add(value);
+        }
+        done.store(true, std::sync::atomic::Ordering::Release);
+        sum.fetch_add(local, std::sync::atomic::Ordering::Relaxed);
+    });
+    sum.into_inner()
+}
+
+/// The work-stealing deque against `crossbeam_deque` (which grows instead
+/// of reporting full; it is given the same number of values at a time).
+fn steal_deque() {
+    use vas::sync::{Slot, StealDeque};
+    const CAPACITY: usize = 1024;
+    const N: usize = 1 << 20;
+    let mut slots = block::<Slot<u64>>(CAPACITY);
+    let mut deque = StealDeque::new(&mut slots[..]);
+    let (worker, stealer) = deque.split();
+    let cb_worker = crossbeam_deque::Worker::new_lifo();
+    let cb_stealer = cb_worker.stealer();
+    let cb_push = |value: u64| {
+        cb_worker.len() < CAPACITY && {
+            cb_worker.push(value);
+            true
+        }
+    };
+
+    let group = "work-stealing deque, owner alone: push then pop";
+    bench(group, "vas::sync::StealDeque", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = worker.push(i);
+                worker.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "crossbeam_deque", N, || {
+        (0..N as u64)
+            .map(|i| {
+                cb_worker.push(i);
+                cb_worker.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+
+    const MOVED: u64 = 1 << 18;
+    for thieves in [1, 2, 4, 8] {
+        let group =
+            format!("work-stealing deque, owner pushes, {thieves} thieves steal, 1024 slots");
+        bench(&group, "vas::sync::StealDeque", MOVED as usize, || {
+            steal_work(
+                thieves,
+                MOVED,
+                |v| worker.push(v).is_ok(),
+                || worker.pop(),
+                || stealer.steal().success(),
+            )
+        });
+        bench(&group, "crossbeam_deque", MOVED as usize, || {
+            steal_work(
+                thieves,
+                MOVED,
+                cb_push,
+                || cb_worker.pop(),
+                || cb_stealer.steal().success(),
+            )
+        });
+    }
+}
+
 fn run() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -644,6 +746,7 @@ fn run() {
     path();
     lru();
     queue();
+    steal_deque();
 }
 
 fn main() {
