@@ -9,7 +9,9 @@ use std::time::Instant;
 
 use vas::hash::FastState;
 use vas::path::Space;
-use vas::{Aabb, Bitset, Deque, Heap, KdTree, Map, PathFinder, Pool, Rng, SpatialGrid, Vector};
+use vas::{
+    Aabb, Bitset, Deque, Heap, KdTree, LruCache, Map, PathFinder, Pool, Rng, SpatialGrid, Vector,
+};
 
 const RUNS: usize = 15;
 
@@ -147,9 +149,14 @@ fn map<const N: usize, const SLOTS: usize>() {
         let _ = map.insert(*key, *key);
     }
     bench(&hits, "vas::Map", N, || {
-        input.iter().filter_map(|key| map.get(key)).fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        input
+            .iter()
+            .filter_map(|key| map.get(key))
+            .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
     });
-    bench(&miss, "vas::Map", N, || misses.iter().filter(|key| map.contains_key(*key)).count() as u64);
+    bench(&miss, "vas::Map", N, || {
+        misses.iter().filter(|key| map.contains_key(*key)).count() as u64
+    });
 
     // hashbrown: the table behind std's HashMap, with its own default hasher
     // and with the vas hasher.
@@ -165,7 +172,10 @@ fn map<const N: usize, const SLOTS: usize>() {
         brown.insert(*key, *key);
     }
     bench(&hits, "hashbrown::HashMap (default hasher)", N, || {
-        input.iter().filter_map(|key| brown.get(key)).fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        input
+            .iter()
+            .filter_map(|key| brown.get(key))
+            .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
     });
     bench(&miss, "hashbrown::HashMap (default hasher)", N, || {
         misses.iter().filter(|key| brown.contains_key(*key)).count() as u64
@@ -183,7 +193,10 @@ fn map<const N: usize, const SLOTS: usize>() {
         brown.insert(*key, *key);
     }
     bench(&hits, "hashbrown::HashMap + vas FastHasher", N, || {
-        input.iter().filter_map(|key| brown.get(key)).fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        input
+            .iter()
+            .filter_map(|key| brown.get(key))
+            .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
     });
     bench(&miss, "hashbrown::HashMap + vas FastHasher", N, || {
         misses.iter().filter(|key| brown.contains_key(*key)).count() as u64
@@ -199,7 +212,10 @@ fn map<const N: usize, const SLOTS: usize>() {
         fixed.len() as u64
     });
     bench(&hits, "heapless::FnvIndexMap", N, || {
-        input.iter().filter_map(|key| fixed.get(key)).fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        input
+            .iter()
+            .filter_map(|key| fixed.get(key))
+            .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
     });
     bench(&miss, "heapless::FnvIndexMap", N, || {
         misses.iter().filter(|key| fixed.contains_key(*key)).count() as u64
@@ -272,14 +288,20 @@ fn bitset() {
         for key in &input {
             let _ = bits.insert(*key as usize % BITS);
         }
-        input.iter().filter(|key| bits.contains(**key as usize % BITS / 2)).count() as u64
+        input
+            .iter()
+            .filter(|key| bits.contains(**key as usize % BITS / 2))
+            .count() as u64
     });
     bench(group, "fixedbitset::FixedBitSet", 200_000, || {
         let mut bits = fixedbitset::FixedBitSet::with_capacity(BITS);
         for key in &input {
             bits.insert(*key as usize % BITS);
         }
-        input.iter().filter(|key| bits.contains(**key as usize % BITS / 2)).count() as u64
+        input
+            .iter()
+            .filter(|key| bits.contains(**key as usize % BITS / 2))
+            .count() as u64
     });
 }
 
@@ -331,7 +353,11 @@ fn spatial() {
     let world = Aabb::new([0.0, 0.0], [1000.0, 1000.0]);
 
     let group = "10k points: build";
-    let mut items: Vec<([f32; 2], u32)> = points.iter().enumerate().map(|(i, p)| (*p, i as u32)).collect();
+    let mut items: Vec<([f32; 2], u32)> = points
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (*p, i as u32))
+        .collect();
     let mut scratch = items.clone();
     bench(group, "vas::KdTree", N, || {
         scratch.copy_from_slice(&items);
@@ -372,7 +398,9 @@ fn spatial() {
     bench(group, "rstar::RTree", QUERIES, || {
         let mut found = 0;
         for center in &centers {
-            found += rtree.locate_within_distance(*center, RADIUS * RADIUS).count() as u64;
+            found += rtree
+                .locate_within_distance(*center, RADIUS * RADIUS)
+                .count() as u64;
         }
         found
     });
@@ -381,7 +409,9 @@ fn spatial() {
     bench(group, "vas::KdTree", QUERIES, || {
         let mut sum = 0.0f32;
         for center in &centers {
-            sum += kd.nearest(center).map_or(0.0, |found| found.distance_squared);
+            sum += kd
+                .nearest(center)
+                .map_or(0.0, |found| found.distance_squared);
         }
         sum as u64
     });
@@ -418,7 +448,8 @@ impl Grid {
     }
 
     fn manhattan(&self, from: u32, goal: u32) -> u32 {
-        (from % self.width).abs_diff(goal % self.width) + (from / self.width).abs_diff(goal / self.width)
+        (from % self.width).abs_diff(goal % self.width)
+            + (from / self.width).abs_diff(goal / self.width)
     }
 }
 
@@ -450,15 +481,59 @@ fn path() {
     let mut nodes = block::<vas::path::Node>(cells);
     let mut open = block::<vas::path::Open>(4 * cells);
     let mut finder = PathFinder::new(&mut nodes, &mut open);
-    bench(group, "vas::PathFinder", 1, || finder.find(&grid, 0, goal).map_or(0, |cost| cost as u64));
+    bench(group, "vas::PathFinder", 1, || {
+        finder.find(&grid, 0, goal).map_or(0, |cost| cost as u64)
+    });
     bench(group, "pathfinding::astar", 1, || {
         let found = pathfinding::prelude::astar(
             &0u32,
-            |node| grid.adjacent(*node).into_iter().flatten().map(|next| (next, 1u32)),
+            |node| {
+                grid.adjacent(*node)
+                    .into_iter()
+                    .flatten()
+                    .map(|next| (next, 1u32))
+            },
             |node| grid.manhattan(*node, goal),
             |node| *node == goal,
         );
         found.map_or(0, |(_, cost)| cost as u64)
+    });
+}
+
+/// A cache of 1024 entries in front of 2048 keys: about half the lookups
+/// hit, every miss inserts (evicting the least recently used).
+fn lru() {
+    const N: usize = 100_000;
+    let mut rng = Rng::new(13);
+    let keys: Vec<u32> = (0..N).map(|_| rng.u32_below(2048)).collect();
+    let group = "lru 1024 of 2048 keys: get, insert on a miss";
+    let mut entries = block::<vas::lru::Entry<u32, u64>>(1024);
+    let mut table = block::<u32>(2048);
+    if let Ok(mut cache) = LruCache::new(&mut entries[..], &mut table[..], 1024) {
+        bench(group, "vas::LruCache", N, || {
+            let mut hits = 0;
+            for key in &keys {
+                if cache.get(key).is_some() {
+                    hits += 1;
+                } else {
+                    cache.insert(*key, u64::from(*key));
+                }
+            }
+            hits
+        });
+    }
+    let capacity = std::num::NonZeroUsize::new(1024).unwrap_or(std::num::NonZeroUsize::MIN);
+    let mut cache = lru::LruCache::with_hasher(capacity, FastState::default());
+    bench(group, "lru::LruCache + vas FastHasher", N, || {
+        let mut hits = 0;
+        for key in &keys {
+            if cache.get(key).is_some() {
+                hits += 1;
+            } else {
+                cache.put(*key, u64::from(*key));
+            }
+        }
+        hits
     });
 }
 
@@ -482,6 +557,7 @@ fn run() {
     random();
     spatial();
     path();
+    lru();
 }
 
 fn main() {

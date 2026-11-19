@@ -29,7 +29,7 @@ Containers take a parameter `S` that says where their memory lives:
 Containers with two blocks of memory take two parameters, the second
 defaulting to the first: `Graph<N, E, SN, SE>`, `StaticGraph<E, SO, SE>`,
 `SpatialGrid<T, D, SC, SE>`, `Quadtree<T, SN, SE>` / `Octree<T, SN, SE>`,
-`PathFinder<SN, SO>`, `FlowField<SN, SO>`. `SparseSet<T, SS, SD, SV>` takes
+`PathFinder<SN, SO>`, `FlowField<SN, SO>`, `LruCache<K, V, SE, ST>`. `SparseSet<T, SS, SD, SV>` takes
 three, each defaulting to the one before. So `Graph<N, E, Borrowed<'a>>` borrows both blocks and
 `Graph<N, E, Inline<64>, Inline<256>>` holds 64 nodes and 256 edges itself.
 
@@ -90,6 +90,7 @@ container's page has a "Growing" section with the details.
 | `Bitset` | grows to hold the highest bit set |
 | `SparseSet` | the sparse block grows to the highest id, the dense blocks with the values |
 | `StaticGraph` | `build` takes exactly what the graph needs |
+| `LruCache` | `new` takes both blocks for the capacity; the capacity is then fixed |
 | `Grid` | `new` takes exactly `width * height` cells; the size is then fixed |
 | `SpatialGrid`, `Quadtree` / `Octree` | cells / nodes and entries grow as points are added |
 | `PathFinder`, `FlowField` | node memory grows to the highest node touched; the open list never fills |

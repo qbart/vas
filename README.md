@@ -37,6 +37,7 @@ feature `Pool<T, Dynamic>` grows on the heap.
 - `Pool`: store with generational handles
 - `Map`: unordered map
 - `SparseSet`: values by `u32` id, packed in one slice (ECS component store)
+- `LruCache`: cache that evicts the least recently used entry
 - `OrderedMap`: map sorted by key (sorted block; small or mostly read)
 - `TreeMap`: map sorted by key (red-black tree; large and changing)
 - `Deque`: double-ended queue (ring buffer)
@@ -67,6 +68,7 @@ fixed storage the cost is the same without the word.
 | `Pool` | O(1) | O(1) | by handle O(1), stale handles detected | O(c) | entities, bullets, sounds: anything referred to by id |
 | `Map` | O(1) average | O(1) average | O(1) average | O(c) | id to entity, name to asset, tile to state |
 | `SparseSet` | O(1) | O(1) (last value moves in) | by id O(1), no hashing | O(n), one packed slice | ECS components by entity id, per-entity state walked every frame |
+| `LruCache` | O(1) average; evicts the least recent when full | O(1) average | O(1) average; `get` refreshes, `peek` does not | O(n), most recent first | decoded assets, generated chunks, cached paths and queries |
 | `OrderedMap` | O(n) (shifts) | O(n) (shifts); `pop_last` O(1) | O(log n); nearest key, range start O(log n) | O(n), contiguous | keyframes, timed events, small sorted tables read every frame |
 | `TreeMap` | O(log n) | O(log n) | O(log n); nearest key, range start O(log n) | O(n), follows links | large sorted sets that change often: event queues with cancel, score boards |
 | `Deque` | push either end O(1) amortised | pop either end O(1) | by index O(1) | O(n) | input buffers, command queues, last-N history (`push_overwrite`) |

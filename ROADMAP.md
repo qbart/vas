@@ -210,7 +210,9 @@
 
 ## 0.38.0 — LRU cache
 
-- [ ] Map with eviction of the least recently used entry
+- [x] `LruCache`: entries packed with a recency list, a table of indices with linear probing and backward-shift removal; keys stored once
+- [x] A full cache evicts in place
+- [x] `make bench-crates` compares it with the `lru` crate: 1.3x slower, no allocation
 
 ## 0.39.0 — vas's own searches
 
@@ -226,6 +228,7 @@
 
 ## Later
 
+- [ ] `LruCache` probes read the entry to compare hashes; keeping hash bits in the table would close most of the 1.3x gap to the `lru` crate
 - [ ] Faster stable sort: `sort_stable_in` is 2x to 4.5x slower than std's driftsort at 100,000 elements (detecting existing runs would help)
 
 - [ ] Growable containers

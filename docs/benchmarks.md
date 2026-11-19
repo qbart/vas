@@ -226,6 +226,7 @@ looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 | components 10k of 100k ids: iterate | vas::SparseSet | 0.1 |
 | components 10k of 100k ids: iterate | vas::Map (50% full) | 0.7 |
 | components 10k of 100k ids: iterate | std HashMap + vas FastHasher | 0.4 |
+| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
 
 ## Against other crates
 
@@ -253,6 +254,7 @@ algorithms, so theirs differ).
 | `KdTree` nearest | `rstar::RTree` | about 3x faster, and 2.5x faster to build |
 | `SpatialGrid` radius query | `rstar::RTree` | about 4.5x faster |
 | `PathFinder` | `pathfinding::astar` | about 1.2x faster |
+| `LruCache` | `lru::LruCache` with the same hasher | 1.3x slower (20 against 15 ns per get or insert); no allocation |
 
 Notes:
 
@@ -322,3 +324,5 @@ Notes:
 | 10k points: 1k nearest | rstar::RTree | 442.2 |
 | A* 128x128 grid, corner to corner | vas::PathFinder | 34996.0 |
 | A* 128x128 grid, corner to corner | pathfinding::astar | 41999.0 |
+| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
+| lru 1024 of 2048 keys: get, insert on a miss | lru::LruCache + vas FastHasher | 15.3 |

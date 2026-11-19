@@ -14,8 +14,8 @@ use vas::grid::Moves;
 use vas::hash::FastState;
 use vas::path::Space;
 use vas::{
-    Aabb, Bitset, Deque, FlowField, Heap, KdTree, Map, OrderedMap, PathFinder, Pool, Quadtree, Rng,
-    SparseSet, SpatialGrid, TreeMap, Vector,
+    Aabb, Bitset, Deque, FlowField, Heap, KdTree, LruCache, Map, OrderedMap, PathFinder, Pool,
+    Quadtree, Rng, SparseSet, SpatialGrid, TreeMap, Vector,
 };
 
 const RUNS: usize = 15;
@@ -934,6 +934,34 @@ fn sparse_set() {
     );
 }
 
+/// A cache of 1024 entries in front of 2048 keys: about half the lookups hit.
+fn lru() {
+    const N: usize = 100_000;
+    let mut rng = Rng::new(13);
+    let keys: Vec<u32> = (0..N).map(|_| rng.u32_below(2048)).collect();
+    let mut entries = block::<vas::lru::Entry<u32, u64>>(1024);
+    let mut table = block::<u32>(2048);
+    let Ok(mut cache) = LruCache::new(&mut entries[..], &mut table[..], 1024) else {
+        return;
+    };
+    bench(
+        "lru 1024 of 2048 keys: get, insert on a miss",
+        "vas::LruCache",
+        N,
+        || {
+            let mut hits = 0;
+            for key in &keys {
+                if cache.get(key).is_some() {
+                    hits += 1;
+                } else {
+                    cache.insert(*key, u64::from(*key));
+                }
+            }
+            hits
+        },
+    );
+}
+
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -956,4 +984,5 @@ fn main() {
     spatial();
     path();
     sparse_set();
+    lru();
 }
