@@ -39,7 +39,7 @@ pub fn line(from: (u32, u32), to: (u32, u32)) -> Line {
     }
 }
 
-/// Iterator over the cells of a line. See [`line`].
+/// Iterator over the cells of a line. See [`line()`].
 #[derive(Clone, Debug)]
 pub struct Line {
     x: i64,
@@ -213,7 +213,7 @@ where
 }
 
 impl<T, S: Storage<T>> Grid<T, S> {
-    /// `true` when nothing blocks the [`line`] from `from` to `to`: no cell
+    /// `true` when nothing blocks the [`line()`] from `from` to `to`: no cell
     /// strictly between them is `opaque`. The two end cells themselves may
     /// be (a wall can be seen). `false` when either end is outside the
     /// grid.

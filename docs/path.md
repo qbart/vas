@@ -27,6 +27,10 @@ impl Space for Level {
 - Costs must be finite and not negative; other costs are ignored.
 - The heuristic defaults to zero (Dijkstra). A heuristic that overestimates
   makes the search faster but the path may not be the cheapest.
+- `predecessors(node, visit)` lists the steps *into* a node, for searches
+  that run backwards from a goal ([`FlowField`](flow.md)). It defaults to
+  `neighbors`, which is right when every step can be taken back at the
+  same cost.
 
 ## Memory
 

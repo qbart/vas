@@ -333,3 +333,33 @@ fn debug_shows_rows() -> Test {
     assert_eq!(format!("{grid:?}"), "[[0, 1], [2, 3]]");
     Ok(())
 }
+
+#[test]
+fn predecessors_are_the_neighbors_reversed() -> Test {
+    use vas::path::Space;
+    let mut rng = vas::Rng::new(9);
+    let grid = Grid::<u8, Inline<64>>::from_fn(Memory::new(), 8, 8, |_, _| rng.u32_below(5) as u8)?;
+    // Depends on both cells, and 0 is a wall.
+    let cost = |from: &u8, to: &u8| (*to != 0).then(|| f32::from(*to) + f32::from(*from) * 0.25);
+    for moves in [Moves::Four, Moves::Eight] {
+        let plain = grid.space(moves, cost);
+        for space in [plain.clone(), plain.cutting_corners()] {
+            for node in 0..64 {
+                let mut forward = Vec::new();
+                for from in 0..64 {
+                    space.neighbors(from, |to, step| {
+                        if to == node {
+                            forward.push((from, step.to_bits()));
+                        }
+                    });
+                }
+                let mut backward = Vec::new();
+                space.predecessors(node, |from, step| backward.push((from, step.to_bits())));
+                forward.sort_unstable();
+                backward.sort_unstable();
+                assert_eq!(forward, backward, "{moves:?} into {node}");
+            }
+        }
+    }
+    Ok(())
+}

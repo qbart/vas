@@ -187,7 +187,9 @@
 
 ## 0.34.0 — flow fields
 
-- [ ] Distance map from one or more goals; every unit follows it downhill
+- [x] `FlowField`: distance map from one or more goals; every unit follows it downhill
+- [x] `Space::predecessors` (defaults to `neighbors`); `Grid::space` lists them exactly, so routes match A* from every cell
+- [x] Benchmarks for `Grid::space`, `FlowField`, field of view and line of sight
 
 ## 0.35.0 — sparse set
 

@@ -1,4 +1,4 @@
-.PHONY: build release test lint fmt examples check miri bench bench-crates publish clean
+.PHONY: build release test lint fmt doc examples check miri bench bench-crates publish clean
 
 build:
 	cargo build
@@ -15,10 +15,13 @@ lint:
 fmt:
 	cargo fmt
 
+doc:
+	RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
+
 examples:
 	for example in arena containers hierarchy pathfinding spatial; do cargo run -q --all-features --example $$example || exit 1; done
 
-check: lint test examples
+check: lint test examples doc
 	cargo fmt --check
 
 # One doc example (`Arena::from_heap`) leaks its block on purpose, so the

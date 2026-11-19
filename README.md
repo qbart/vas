@@ -84,6 +84,7 @@ fixed storage the cost is the same without the word.
 | `grid::line` (Bresenham) | O(1) per cell | bullets, lasers, drawing on tiles; the same cells both ways |
 | `Grid::line_of_sight` | O(distance) | can this guard see that cell; symmetric |
 | `Grid::field_of_view` (symmetric shadowcasting) | O(cells within the radius), no memory | fog of war, roguelike vision, light radius; a sees b exactly when b sees a |
+| `FlowField` (Dijkstra map) | O((nodes + edges) log nodes) per build, then O(1) per unit step | many units heading for the same goals: armies, monsters chasing the player, workers to the nearest stockpile |
 | `Traversal` breadth first | O(nodes + edges reached) | flood fill, tiles within N moves, fewest steps |
 | `Traversal` depth first | O(nodes + edges reached), no recursion | reachability, dependency walks, maze generation |
 | `Traversal` topological order | O(nodes + edges) | build orders, tech trees, system update order |
@@ -113,6 +114,7 @@ Algorithms so far:
 
 - `Rng`: seedable pseudo-random number generator
 - `PathFinder`: A* / Dijkstra shortest path
+- `FlowField`: the way to the nearest goal from every node at once
 - `Traversal`: breadth first, depth first, topological order over graphs and grids
 - `grid::line`, `Grid::line_of_sight`, `Grid::field_of_view`: lines and sight on tile grids
 - `sort`: quicksort and stable merge sort on any slice; never panic, no allocation

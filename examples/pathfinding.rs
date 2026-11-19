@@ -6,7 +6,7 @@ use vas::graph::{EdgeSlot, NodeSlot};
 use vas::grid::Moves;
 use vas::path::{Node, Open};
 use vas::static_graph::Edge;
-use vas::{Graph, Grid, Memory, PathFinder, StaticGraph, Vector};
+use vas::{FlowField, Graph, Grid, Memory, PathFinder, StaticGraph, Vector};
 
 fn main() -> Result<(), Box<dyn Error>> {
     // A* on a tile grid: a cell is a node, its index is y * width + x.
@@ -28,6 +28,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     assert_eq!(path.len(), 28);
     let through = path.get(14).and_then(|&node| level.position(node));
     assert_eq!(through, Some((9, 5))); // the gap
+
+    // Flow field: one search, then every unit on the map knows its next step
+    // towards the nearest exit.
+    let mut field_nodes = Memory::<Node, 100>::new();
+    let mut field_open = Memory::<Open, 256>::new();
+    let mut field = FlowField::new(&mut field_nodes, &mut field_open);
+    let exits = [
+        level.index(0, 9).ok_or("outside")?,
+        level.index(9, 9).ok_or("outside")?,
+    ];
+    field.build(&walk, &exits, f32::INFINITY)?;
+    let unit = level.index(9, 0).ok_or("outside")?;
+    assert_eq!(field.cost(unit), Some(9.0)); // straight down through the gap
+    assert_eq!(
+        field.next(unit).and_then(|node| level.position(node)),
+        Some((9, 1))
+    );
 
     // Graph: waypoints that can change at run time.
     let mut node_memory = Memory::<NodeSlot<&str>, 8>::new();

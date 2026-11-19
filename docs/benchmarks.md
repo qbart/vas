@@ -85,7 +85,11 @@ or the nearest neighbour is wanted; this benchmark does not show them at
 their best.
 
 **Path search.** On a 128x128 grid with 20% walls, corner to corner, A* with
-a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
+a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms. On the
+same map as a `vas::Grid`, A* through `Grid::space` is about 10% slower
+than the hand-written `Space` (bounds checks through `offset`, the cost
+closure); a whole-map `FlowField` takes 0.7 ms, a field of view of radius
+64 from the centre 0.7 µs, and a line of sight 10 ns.
 
 ### Results
 
@@ -205,6 +209,10 @@ a Manhattan heuristic takes about 0.04 ms and Dijkstra about 0.5 ms.
 | 10k points: build | vas::Quadtree | 17.6 |
 | 128x128 grid, corner to corner | vas::PathFinder A* | 34966.0 |
 | 128x128 grid, corner to corner | vas::PathFinder Dijkstra | 549943.0 |
+| 128x128 grid, corner to corner | vas::PathFinder A* on Grid::space | 39785.0 |
+| 128x128 grid, flow field to a corner | vas::FlowField build | 669769.0 |
+| 128x128 grid, field of view radius 64 | vas::Grid::field_of_view | 721.0 |
+| 128x128 grid, line of sight | vas::Grid::line_of_sight | 10.5 |
 
 ## Against other crates
 

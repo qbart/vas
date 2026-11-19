@@ -10,10 +10,11 @@ use std::hint::black_box;
 use std::mem::MaybeUninit;
 use std::time::Instant;
 
+use vas::grid::Moves;
 use vas::hash::FastState;
 use vas::path::Space;
 use vas::{
-    Aabb, Bitset, Deque, Heap, KdTree, Map, OrderedMap, PathFinder, Pool, Quadtree, Rng,
+    Aabb, Bitset, Deque, FlowField, Heap, KdTree, Map, OrderedMap, PathFinder, Pool, Quadtree, Rng,
     SpatialGrid, TreeMap, Vector,
 };
 
@@ -778,6 +779,63 @@ fn path() {
         "vas::PathFinder Dijkstra",
         1,
         || finder.find(&grid, 0, goal).map_or(0, |cost| cost as u64),
+    );
+
+    // The same map as a vas::Grid.
+    let mut tiles = block::<bool>(cells);
+    let walls = &grid.walls;
+    let Ok(level) = vas::Grid::from_fn(&mut tiles[..], WIDTH, WIDTH, |x, y| {
+        walls.get((y * WIDTH + x) as usize).copied().unwrap_or(true)
+    }) else {
+        return;
+    };
+    let walk = level.space(Moves::Four, |_, wall| (!wall).then_some(1.0));
+    bench(
+        "128x128 grid, corner to corner",
+        "vas::PathFinder A* on Grid::space",
+        1,
+        || finder.find(&walk, 0, goal).map_or(0, |cost| cost as u64),
+    );
+    let mut field_nodes = block::<vas::path::Node>(cells);
+    let mut field_open = block::<vas::path::Open>(4 * cells);
+    let mut field = FlowField::new(&mut field_nodes[..], &mut field_open[..]);
+    bench(
+        "128x128 grid, flow field to a corner",
+        "vas::FlowField build",
+        1,
+        || {
+            let built = field.build(&walk, &[goal], f32::INFINITY);
+            built.map_or(0, |()| field.cost(0).map_or(0, |cost| cost as u64))
+        },
+    );
+    let centre = WIDTH / 2;
+    bench(
+        "128x128 grid, field of view radius 64",
+        "vas::Grid::field_of_view",
+        1,
+        || {
+            let mut seen = 0;
+            level.field_of_view(centre, centre, 64, |wall| *wall, |_, _| seen += 1);
+            seen
+        },
+    );
+    let mut rng = Rng::new(4);
+    let pairs: Vec<_> = (0..1000)
+        .map(|_| {
+            let a = (rng.u32_below(WIDTH), rng.u32_below(WIDTH));
+            (a, (rng.u32_below(WIDTH), rng.u32_below(WIDTH)))
+        })
+        .collect();
+    bench(
+        "128x128 grid, line of sight",
+        "vas::Grid::line_of_sight",
+        pairs.len(),
+        || {
+            let clear = pairs
+                .iter()
+                .filter(|(a, b)| level.line_of_sight(*a, *b, |wall| *wall));
+            clear.count() as u64
+        },
     );
 }
 

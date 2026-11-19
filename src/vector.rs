@@ -465,7 +465,7 @@ impl<T, S: Storage<T>> Vector<T, S> {
     /// quicksort, not the slice's: it never panics, also on a comparison
     /// that is not a total order, and puts equal elements in the same order
     /// on every compiler and target. O(n log n) worst case, O(n) on sorted
-    /// or reversed input, no memory. See [`sort`](crate::sort).
+    /// or reversed input, no memory. See [`crate::sort`].
     #[inline]
     pub fn sort_unstable(&mut self)
     where

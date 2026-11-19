@@ -17,6 +17,19 @@ pub trait Space {
     /// ignored.
     fn neighbors<F: FnMut(u32, f32)>(&self, node: u32, visit: F);
 
+    /// Calls `visit(previous, cost)` for every node from which `node` can
+    /// be reached in one step, with the cost of that step. Used by searches
+    /// that run backwards from a goal, such as
+    /// [`FlowField`](crate::FlowField).
+    ///
+    /// The default lists [`neighbors`](Self::neighbors), which is right
+    /// when every step can be taken back at the same cost. Implement it
+    /// when that is not so.
+    #[inline]
+    fn predecessors<F: FnMut(u32, f32)>(&self, node: u32, visit: F) {
+        self.neighbors(node, visit);
+    }
+
     /// Estimated remaining cost from `from` to `goal`. It must never
     /// overestimate, or the path found may not be the cheapest.
     ///
@@ -54,32 +67,34 @@ impl fmt::Display for PathError {
 impl core::error::Error for PathError {}
 
 /// Per-node search state. Opaque; it only exists so the user can size the
-/// memory for a [`PathFinder`]: one per node, `Memory::<Node, N>`.
+/// memory for a [`PathFinder`] or [`FlowField`](crate::FlowField): one per
+/// node, `Memory::<Node, N>`.
 #[derive(Clone, Copy)]
 pub struct Node {
     // The search that last touched this node. Other fields are only
     // meaningful when it equals the finder's current stamp.
-    stamp: u32,
+    pub(crate) stamp: u32,
     // The node this one was reached from.
-    parent: u32,
+    pub(crate) parent: u32,
     // Cheapest known cost from the start.
-    cost: f32,
+    pub(crate) cost: f32,
 }
 
 /// An entry of the open list. Opaque; it only exists so the user can size
-/// the memory for a [`PathFinder`]: `Memory::<Open, N>`.
+/// the memory for a [`PathFinder`] or [`FlowField`](crate::FlowField):
+/// `Memory::<Open, N>`.
 #[derive(Clone, Copy)]
 pub struct Open {
     // Cost so far plus the heuristic.
-    priority: f32,
+    pub(crate) priority: f32,
     // Cost from the start when this entry was pushed.
-    cost: f32,
-    node: u32,
+    pub(crate) cost: f32,
+    pub(crate) node: u32,
 }
 
 /// Lowest priority first; on ties, the entry further along the path.
 #[derive(Clone, Copy)]
-struct Cheapest;
+pub(crate) struct Cheapest;
 
 impl Order<Open> for Cheapest {
     #[inline]
@@ -161,7 +176,7 @@ where
 }
 
 /// A node no search has reached yet.
-const UNSEEN: Node = Node {
+pub(crate) const UNSEEN: Node = Node {
     stamp: 0,
     parent: 0,
     cost: 0.0,
@@ -170,7 +185,10 @@ const UNSEEN: Node = Node {
 /// The search state of node `index`. With dynamic storage the node memory
 /// grows to reach it; with fixed storage an index past the end is `None`.
 #[inline]
-fn node_mut<S: Storage<Node>>(nodes: &mut Vector<Node, S>, index: u32) -> Option<&mut Node> {
+pub(crate) fn node_mut<S: Storage<Node>>(
+    nodes: &mut Vector<Node, S>,
+    index: u32,
+) -> Option<&mut Node> {
     let index = index as usize;
     if index >= nodes.len() {
         nodes.resize_with(index.checked_add(1)?, || UNSEEN).ok()?;
@@ -180,7 +198,7 @@ fn node_mut<S: Storage<Node>>(nodes: &mut Vector<Node, S>, index: u32) -> Option
 
 /// Node memory as the search sees it: fixed (a slice) or growing (a
 /// vector over dynamic storage).
-trait Nodes {
+pub(crate) trait Nodes {
     /// The search state of node `index`, if there is memory for it.
     fn node(&mut self, index: u32) -> Option<&mut Node>;
 }

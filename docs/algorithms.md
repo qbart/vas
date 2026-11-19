@@ -21,6 +21,7 @@ in memory the caller passes in.
 | `BinaryTree` | `pre_order`, `in_order`, `post_order`, `level_order_into`, `common_ancestor`, `height`, `depth` | [binary tree](binary_tree.md) |
 | `Grid` | `line_of_sight`, `field_of_view` (symmetric shadowcasting), `grid::line` (Bresenham); `neighbors` (4 or 8), `offset`, `fill_rect`; `space(moves, cost)` makes it a `Space` for the row below | [grid](grid.md) |
 | `Graph`, `StaticGraph`, `Grid`, any `Space` | `Traversal`: breadth first, depth first, topological order; `PathFinder`: A* and Dijkstra | [traversal](traversal.md), [path](path.md) |
+| `Graph`, `StaticGraph`, `Grid`, any `Space` | `FlowField`: cheapest step to the nearest of many goals, for every node at once | [flow](flow.md) |
 | `SpatialGrid`, `Quadtree` / `Octree`, `Bvh`, `KdTree` | box, radius, ray and nearest queries | their specs |
 
 Not provided, on purpose: sorting a deque in place without

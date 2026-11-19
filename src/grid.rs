@@ -599,6 +599,45 @@ where
         }
     }
 
+    /// The steps into `node`, each costed from the cell it leaves, with the
+    /// same corner rule as [`neighbors`](Space::neighbors).
+    fn predecessors<F: FnMut(u32, f32)>(&self, node: u32, mut visit: F) {
+        let grid = self.grid;
+        let Some((x, y)) = grid.position(node) else {
+            return;
+        };
+        let Some(to) = grid.cells.get(node as usize) else {
+            return;
+        };
+        // The index and cell at an offset from `node`.
+        let at = |dx, dy| {
+            let index = grid
+                .offset(x, y, dx, dy)
+                .and_then(|(x, y)| grid.index(x, y))?;
+            Some((index, grid.cells.get(index as usize)?))
+        };
+        let count = usize::from(self.moves.count());
+        for &(dx, dy) in STEPS.iter().take(count) {
+            let Some((index, from)) = at(dx, dy) else {
+                continue;
+            };
+            let Some(cost) = (self.cost)(from, to) else {
+                continue;
+            };
+            if dx == 0 || dy == 0 {
+                visit(index, cost);
+                continue;
+            }
+            // A diagonal step from `from`: its side cells are the ones
+            // beside `node` towards it.
+            let side =
+                |dx, dy| at(dx, dy).is_some_and(|(_, cell)| (self.cost)(from, cell).is_some());
+            if self.cut_corners || (side(dx, 0) && side(0, dy)) {
+                visit(index, cost * SQRT_2);
+            }
+        }
+    }
+
     #[inline]
     fn heuristic(&self, from: u32, goal: u32) -> f32 {
         let (Some((fx, fy)), Some((gx, gy))) = (self.grid.position(from), self.grid.position(goal))
