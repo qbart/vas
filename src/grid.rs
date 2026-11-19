@@ -10,6 +10,10 @@ use crate::path::Space;
 use crate::storage::{Inline, IntoBuffer, Storage};
 use crate::{Full, Vector};
 
+mod sight;
+
+pub use sight::{Line, line};
+
 /// Steps to the four sides first, then the four diagonals:
 /// left, right, up, down, up-left, up-right, down-left, down-right.
 const STEPS: [(i32, i32); 8] = [

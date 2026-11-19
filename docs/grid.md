@@ -68,6 +68,45 @@ let path = finder.path_rev().filter_map(|node| map.position(node));
 
 The node memory of a `PathFinder` or `Traversal` needs one entry per cell.
 
+## Lines and sight
+
+| Operation | Signature | Cost |
+|---|---|---|
+| line | `grid::line(from, to)` | iterator over the cells, both ends included; O(1) per cell |
+| line of sight | `grid.line_of_sight(from, to, opaque)` | O(distance) |
+| field of view | `grid.field_of_view(x, y, radius, opaque, visible)` | O(cells within the radius) |
+
+`opaque(&cell)` says whether a cell blocks sight; `visible(x, y)` is called
+once for every cell seen.
+
+**Line.** Bresenham's line: one step to the side or diagonally at a time,
+`max(|dx|, |dy|) + 1` cells. It is the same both ways: `line(a, b)` is
+`line(b, a)` reversed, because where the exact line passes halfway between
+two cells the lower coordinate is always taken. `line` works on any
+coordinates, without a grid: use it for bullets, lasers, drawing.
+
+**Line of sight.** `true` when no cell strictly between the two ends is
+opaque; the ends themselves may be (a wall is seen). `false` when an end is
+outside the grid. Symmetric, as the line is.
+
+**Field of view.** Symmetric shadowcasting (Albert Ford's variant of
+recursive shadowcasting), over the four quarters around the origin:
+
+- A floor cell is seen when the ray to its centre is not blocked, so `b` is
+  seen from `a` exactly when `a` is seen from `b`: a monster sees the
+  player exactly when the player sees it.
+- A wall is seen when any part of it is, so room walls show whole.
+- The view is a disc, `dx² + dy² <= radius²`; cells outside the grid block
+  sight.
+- Each cell is reported once, the origin first. Nothing is reported when
+  the origin is outside the grid.
+- No memory: the scan recurses once per gap that opens behind a wall, at
+  most `radius` calls deep. Rows more than 2^24 cells away are not scanned.
+
+Field of view and line of sight answer slightly different questions (the
+centre ray against a Bresenham line), so near the edges of a shadow they
+can disagree; use one of them for a given rule.
+
 ## Guarantees
 
 - No allocation beyond the storage, no panics, no `unsafe`. Reads outside
@@ -89,3 +128,5 @@ The node memory of a `PathFinder` or `Traversal` needs one entry per cell.
 - Three or more dimensions. Index a 3D voxel grid by hand in a `Vector`,
   or use one `Grid` per layer.
 - Hexagonal grids: write a `Space` for the layout the game uses.
+- Field of view with light that fades or passes partly through cells:
+  `visible` gets the position, so compute the distance there.

@@ -182,8 +182,8 @@
 
 ## 0.33.0 — line of sight and field of view
 
-- [ ] Grid lines (Bresenham) and line of sight
-- [ ] Field of view by shadowcasting
+- [x] Grid lines (Bresenham, the same cells both ways) and line of sight
+- [x] Field of view by symmetric shadowcasting: no memory, each cell reported once
 
 ## 0.34.0 — flow fields
 
