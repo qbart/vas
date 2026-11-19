@@ -3,8 +3,8 @@
 `Traversal<SM, SL = SM>` runs breadth-first search, depth-first search and
 topological sorting over any [`Space`](path.md#the-space), with
 [storage parameters](storage.md#storage-parameter). `Graph` and
-`StaticGraph` are spaces; so is any tile grid that lists the neighbours of
-a cell. Edge costs are ignored: every listed neighbour is one step. For the
+`StaticGraph` are spaces, and `Grid::space` makes a tile grid one (see
+[grid](grid.md#path-search-and-traversal)). Edge costs are ignored: every listed neighbour is one step. For the
 cheapest path by cost use [`PathFinder`](path.md).
 
 | Search | Returns | Cost | Use it for |

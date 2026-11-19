@@ -44,6 +44,7 @@ feature `Pool<T, Dynamic>` grows on the heap.
 - `BinaryTree`: binary tree
 - `Graph`: directed graph
 - `StaticGraph`: read-only directed graph, built once
+- `Grid`: tile map, one value per cell, searchable with `PathFinder` and `Traversal`
 - `SpatialGrid`: uniform grid for box and radius queries (2D, 3D, ...)
 - `Quadtree` / `Octree`: adaptive space subdivision for box and radius queries
 - `Bvh`: bounding volume hierarchy for box, point and ray queries
@@ -70,6 +71,7 @@ fixed storage the cost is the same without the word.
 | `BinaryTree` | O(1) at a free child | node and subtree O(subtree) | by id O(1); depth O(d) | pre / in / post order O(n) | decision trees, expression trees, BSP |
 | `Graph` | node, edge O(1) | edge O(1); node O(edges at it) | node, edge O(1); `find_edge` O(out-degree) | O(c) | road networks, quest and dialogue graphs, editable navigation |
 | `StaticGraph` | built once, O(nodes + edges) | no | neighbours O(1) | O(nodes + edges) | baked navigation meshes, tech trees, fixed level graphs |
+| `Grid` | set a cell O(1); created full, O(width × height) | no (fixed size) | by `(x, y)` or index O(1); neighbours O(1) | O(n), contiguous rows | tile maps, walls and floors, height and influence maps; path search on tiles |
 | `SpatialGrid` | O(1) | O(1); move O(1) | box / radius query O(cells covered + k) | O(c) | many similar-sized moving objects: units, bullets, collision candidates |
 | `Quadtree` / `Octree` | O(h) | O(h) | box / radius query O(log n + k) typical | O(c) | unevenly spread objects: open worlds, clustered props |
 | `Bvh` | build O(n log n), `refit` O(n) | rebuild | box / point / ray query O(log n + k) typical | O(n) | static or slowly moving shapes: level geometry, ray picking |
@@ -78,7 +80,7 @@ fixed storage the cost is the same without the word.
 | Algorithm | Cost | Use it for |
 |---|---|---|
 | `Rng` | O(1) per number | loot rolls, procedural generation, shuffles; seedable and replayable |
-| `PathFinder` | A* / Dijkstra, O((nodes + edges) log nodes) worst case | unit movement on tile grids, navigation graphs |
+| `PathFinder` | A* / Dijkstra, O((nodes + edges) log nodes) worst case | unit movement on tile grids (`Grid::space`), navigation graphs |
 | `Traversal` breadth first | O(nodes + edges reached) | flood fill, tiles within N moves, fewest steps |
 | `Traversal` depth first | O(nodes + edges reached), no recursion | reachability, dependency walks, maze generation |
 | `Traversal` topological order | O(nodes + edges) | build orders, tech trees, system update order |
@@ -90,6 +92,7 @@ Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
 | Structure | Algorithm | Cost |
 |---|---|---|
 | `Vector` | `retain`, `dedup` | O(n) |
+| `Grid` | `space` (searched by `PathFinder` and `Traversal`, costs as above); `neighbors`; `fill_rect` | O(1) per neighbour; O(area) |
 | `Vector`, any slice | `sort_unstable` / `sort::unstable` (quicksort, no memory, never panics) | O(n log n) worst case; O(n) when sorted or reversed; O(n log k) for k distinct keys |
 | `Vector`, any slice | `sort_stable` / `sort::stable` (merge sort, no memory) | O(n log n) comparisons, O(n log² n) moves; O(n) when sorted |
 | `Vector`, any slice | `sort_stable_in` / `sort::stable_in` (scratch from the caller) | O(n log n) with n / 2 scratch |

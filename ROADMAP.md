@@ -174,6 +174,41 @@
 - [x] As fast as `core`'s `sort_unstable`; the stable sort gains from the same short-slice sort (30 to 22 ns per element at 100k with scratch)
 - [x] Sort benchmarks rotate between 8 inputs, so the branch predictor cannot learn one
 
+## 0.32.0 — tile grid
+
+- [x] `Grid<T, S>`: dense 2D grid of cells, `(x, y)` access, rows as slices, all three storage kinds
+- [x] Neighbours (4 or 8) without coordinate underflow
+- [x] `Grid::space`: `PathFinder` and `Traversal` run on a grid directly, with a cost per step and no corner cutting
+
+## 0.33.0 — line of sight and field of view
+
+- [ ] Grid lines (Bresenham) and line of sight
+- [ ] Field of view by shadowcasting
+
+## 0.34.0 — flow fields
+
+- [ ] Distance map from one or more goals; every unit follows it downhill
+
+## 0.35.0 — sparse set
+
+- [ ] `SparseSet`: O(1) insert, remove and lookup by id, values in one dense slice
+
+## 0.36.0 — union-find
+
+- [ ] Disjoint sets with path compression and union by size
+
+## 0.37.0 — fixed-capacity string
+
+- [ ] UTF-8 string over the storage kinds; never allocates on its own
+
+## 0.38.0 — LRU cache
+
+- [ ] Map with eviction of the least recently used entry
+
+## 0.39.0 — vas's own searches
+
+- [ ] `binary_search` and `select_nth_unstable` that do not come from `core`
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

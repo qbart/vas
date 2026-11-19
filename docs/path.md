@@ -6,8 +6,9 @@ See [storage](storage.md) and [errors](errors.md).
 
 ## The space
 
-The search does not need a graph structure. Implement `path::Space` for
-whatever you are searching:
+The search does not need a graph structure. `Graph`, `StaticGraph` and
+`Grid::space` (see [grid](grid.md#path-search-and-traversal)) are spaces
+already; for anything else implement `path::Space`:
 
 ```rust
 impl Space for Level {

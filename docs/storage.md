@@ -24,7 +24,7 @@ heap, arena, a mapped GPU buffer, ...), or on memory it takes from an
 Containers take a parameter `S` that says where their memory lives:
 `Vector<T, S>`, `Pool<T, S>`, `Map<K, V, S>`, `Deque<T, S>`, `Heap<T, S>`,
 `OrderedMap<K, V, S>`, `TreeMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`,
-`BinaryTree<T, S>`.
+`BinaryTree<T, S>`, `Grid<T, S>`.
 
 Containers with two blocks of memory take two parameters, the second
 defaulting to the first: `Graph<N, E, SN, SE>`, `StaticGraph<E, SO, SE>`,
@@ -88,6 +88,7 @@ container's page has a "Growing" section with the details.
 | `Map` | moves to two new blocks (entries and tags) when more than 3/4 full |
 | `Bitset` | grows to hold the highest bit set |
 | `StaticGraph` | `build` takes exactly what the graph needs |
+| `Grid` | `new` takes exactly `width * height` cells; the size is then fixed |
 | `SpatialGrid`, `Quadtree` / `Octree` | cells / nodes and entries grow as points are added |
 | `PathFinder` | node memory grows to the highest node touched; the open list never fills |
 

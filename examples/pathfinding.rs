@@ -3,56 +3,31 @@
 use std::error::Error;
 
 use vas::graph::{EdgeSlot, NodeSlot};
-use vas::path::{Node, Open, Space};
+use vas::grid::Moves;
+use vas::path::{Node, Open};
 use vas::static_graph::Edge;
-use vas::{Graph, Memory, PathFinder, StaticGraph, Vector};
-
-/// A tile grid: node index = y * width + x.
-struct Level {
-    width: u32,
-    height: u32,
-}
-
-impl Space for Level {
-    fn neighbors<F: FnMut(u32, f32)>(&self, node: u32, mut visit: F) {
-        let (x, y) = (node % self.width, node / self.width);
-        if x > 0 {
-            visit(node - 1, 1.0);
-        }
-        if x + 1 < self.width {
-            visit(node + 1, 1.0);
-        }
-        if y > 0 {
-            visit(node - self.width, 1.0);
-        }
-        if y + 1 < self.height {
-            visit(node + self.width, 1.0);
-        }
-    }
-
-    fn heuristic(&self, from: u32, goal: u32) -> f32 {
-        let dx = (from % self.width).abs_diff(goal % self.width);
-        let dy = (from / self.width).abs_diff(goal / self.width);
-        (dx + dy) as f32
-    }
-}
+use vas::{Graph, Grid, Memory, PathFinder, StaticGraph, Vector};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // A* on a grid: no graph structure needed, only the neighbours.
-    let level = Level {
-        width: 10,
-        height: 10,
-    };
+    // A* on a tile grid: a cell is a node, its index is y * width + x.
+    let mut tiles = Memory::<bool, 100>::new(); // true is a wall
+    let mut level = Grid::new(&mut tiles, 10, 10, false)?;
+    level.fill_rect(0, 5, 9, 1, true); // a wall with a gap on the right
+    let walk = level.space(Moves::Four, |_, wall| (!wall).then_some(1.0));
     let mut nodes = Memory::<Node, 100>::new(); // one per tile
     let mut open = Memory::<Open, 256>::new();
     let mut finder = PathFinder::new(&mut nodes, &mut open);
-    assert_eq!(finder.find(&level, 0, 99)?, 18.0);
+    let start = level.index(0, 0).ok_or("outside")?;
+    let goal = level.index(0, 9).ok_or("outside")?;
+    // Over to the gap at x = 9 and back: 9 + 9 + 9.
+    assert_eq!(finder.find(&walk, start, goal)?, 27.0);
 
     let mut memory = Memory::<u32, 64>::new();
     let mut path = Vector::new(&mut memory);
     finder.path_into(&mut path)?;
-    assert_eq!(path.len(), 19);
-    assert_eq!((path.first(), path.last()), (Some(&0), Some(&99)));
+    assert_eq!(path.len(), 28);
+    let through = path.get(14).and_then(|&node| level.position(node));
+    assert_eq!(through, Some((9, 5))); // the gap
 
     // Graph: waypoints that can change at run time.
     let mut node_memory = Memory::<NodeSlot<&str>, 8>::new();
