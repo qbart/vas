@@ -1,6 +1,7 @@
 //! The general-purpose containers. Run with `cargo run --example containers`.
 
 use std::error::Error;
+use std::fmt::Write;
 
 use vas::bitset::words;
 use vas::pool::Slot;
@@ -60,6 +61,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut items = Map::new(&mut memory, &mut tags);
     items.insert(7, "sword")?;
     assert_eq!(items.get(&7), Some(&"sword"));
+
+    // String: text without the heap, formatted with write!.
+    let mut hud = vas::String::<Inline<32>>::inline();
+    write!(hud, "HP {}/{}", 42, 100)?;
+    assert_eq!(hud, "HP 42/100");
 
     // SparseSet: components by entity id, packed for fast iteration.
     let mut sparse = Memory::<u32, 1024>::new(); // entity ids below 1024

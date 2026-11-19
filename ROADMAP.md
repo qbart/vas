@@ -204,7 +204,9 @@
 
 ## 0.37.0 — fixed-capacity string
 
-- [ ] UTF-8 string over the storage kinds; never allocates on its own
+- [x] `String`: UTF-8 string over the storage kinds; never allocates on its own
+- [x] `write!` through `fmt::Write`, `push_str_truncating` for labels, `insert` / `remove` / `retain` at character boundaries
+- [x] `Borrow<str>`: `Map` keyed by `String` is looked up with `&str`
 
 ## 0.38.0 — LRU cache
 

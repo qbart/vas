@@ -24,7 +24,7 @@ heap, arena, a mapped GPU buffer, ...), or on memory it takes from an
 Containers take a parameter `S` that says where their memory lives:
 `Vector<T, S>`, `Pool<T, S>`, `Map<K, V, S>`, `Deque<T, S>`, `Heap<T, S>`,
 `OrderedMap<K, V, S>`, `TreeMap<K, V, S>`, `Bitset<S>`, `Tree<T, S>`,
-`BinaryTree<T, S>`, `Grid<T, S>`, `UnionFind<S>`.
+`BinaryTree<T, S>`, `Grid<T, S>`, `UnionFind<S>`, `String<S>`.
 
 Containers with two blocks of memory take two parameters, the second
 defaulting to the first: `Graph<N, E, SN, SE>`, `StaticGraph<E, SO, SE>`,
@@ -83,7 +83,7 @@ container's page has a "Growing" section with the details.
 
 | Container | How it grows |
 |---|---|
-| `Vector`, `Heap`, `OrderedMap`, `TreeMap`, `UnionFind` | the block is extended, in place when the allocator can |
+| `Vector`, `String`, `Heap`, `OrderedMap`, `TreeMap`, `UnionFind` | the block is extended, in place when the allocator can |
 | `Deque` | the block is extended, then the ring is put back in order |
 | `Pool`, `Tree`, `BinaryTree`, `Graph` | the block is extended; handles and ids stay valid |
 | `Map` | moves to two new blocks (entries and tags) when more than 3/4 full |

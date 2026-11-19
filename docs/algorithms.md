@@ -9,6 +9,7 @@ in memory the caller passes in.
 | Structure | Algorithms | Spec |
 |---|---|---|
 | `Vector` | `retain`, `retain_mut`, `dedup*`; vas's own `sort_unstable*` (quicksort) and `sort_stable*` (merge sort), in place, no memory; slice algorithms through `Deref`: `binary_search`, `select_nth_unstable`, `reverse`, `rotate`, `contains` | [vector](vector.md), [sort](sort.md) |
+| `String` | `retain`, `insert` / `remove` at a character boundary, `push_str_truncating`; `str` algorithms through `Deref` | [string](string.md) |
 | any slice | `vas::sort::{unstable, stable, stable_in}` and their `_by` / `_by_key` forms | [sort](sort.md) |
 | `Deque` | `retain`, `retain_mut`, `make_contiguous` (then `vas::sort` or any slice algorithm) | [deque](deque.md) |
 | `Pool` | `retain` | [pool](pool.md) |
