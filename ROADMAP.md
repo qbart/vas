@@ -221,6 +221,21 @@
 - [x] The same methods on `Vector`; `Bvh`, `KdTree` and `OrderedMap` use them
 - [x] `make check` builds the docs with warnings denied
 
+## 0.40.0 — arenas for worker threads
+
+- [x] `Arena` is `Send` (still not `Sync`): a `sub` arena or scratch scope moves into a job or thread
+- [x] `Arena::scratch`: a scratch scope over the rest of the block, given back when it ends; O(1), enforced by the borrow checker, works with `Dynamic(&scratch)`
+
+## 0.41.0 — concurrent queue
+
+- [ ] `vas::sync::CachePadded`
+- [ ] `vas::sync::Queue`: bounded MPMC queue (Vyukov), `Borrowed` and `Inline`
+- [ ] Concurrency checks: Miri with threads, ThreadSanitizer (`make tsan`)
+
+## 0.42.0 — work-stealing deque
+
+- [ ] `vas::sync::StealDeque`: one owner (LIFO), many thieves (FIFO), `Worker` / `Stealer` handles that borrow it
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

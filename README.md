@@ -21,7 +21,7 @@ Memory:
 
 - `Memory`: an inline block for one container
 - `KB`, `MB`, `GB`: units for sizes, as in `Arena::from_heap(MB(20))`
-- `Arena`: one big block shared by many containers and values
+- `Arena`: one big block shared by many containers and values; `Send`, with scratch scopes that give everything back
 - `Arena::from_heap(bytes)`, `HeapBlock`: that block from the heap (`alloc` feature, off by default)
 - `Allocator`: the trait behind growing containers; implemented by `Arena` and, with `alloc`, `Global`
 

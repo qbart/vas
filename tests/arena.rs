@@ -75,7 +75,9 @@ fn empty_requests_and_zero_sized_types() {
             .alloc::<()>(1000)
             .is_ok_and(|piece| piece.len() == 1000)
     );
-    assert_eq!(arena.used(), 0);
+    // Nothing but the padding to align the empty `u32` piece: the block of
+    // bytes may start at any address.
+    assert!(arena.used() < align_of::<u32>());
 
     let mut nothing = Memory::<u8, 0>::new();
     let arena = Arena::new(&mut nothing);
@@ -236,4 +238,101 @@ fn static_block_is_taken_once_and_gives_static_containers() {
             assert_eq!(*world.score, 10);
         }
     }
+}
+
+fn is_send<T: Send>(_: &T) {}
+
+#[test]
+fn an_arena_moves_into_another_thread() -> Result<(), Full<()>> {
+    let mut block = Memory::<u8, 1024>::new();
+    let frame = Arena::new(&mut block);
+    let workers = [frame.sub(256)?, frame.sub(256)?];
+    is_send(&workers[0]);
+    std::thread::scope(|scope| {
+        let handles = workers.map(|worker| {
+            scope.spawn(move || {
+                let mut ids = Vector::new(worker.alloc::<u32>(32)?);
+                for id in 0..32 {
+                    ids.push(id).map_err(|_| Full(()))?;
+                }
+                Ok::<u32, Full<()>>(ids.iter().sum())
+            })
+        });
+        for handle in handles {
+            assert_eq!(handle.join().ok(), Some(Ok(496)));
+        }
+    });
+    // The workers' pieces came out of the frame's budget.
+    assert_eq!(frame.remaining(), 512);
+    Ok(())
+}
+
+#[test]
+fn a_scratch_scope_gives_everything_back() -> Result<(), Full<()>> {
+    let mut block = Memory::<u8, 256>::new();
+    let mut frame = Arena::new(&mut block);
+    let kept = frame.alloc_value(7u8).map_err(|_| Full(()))?;
+    let mark = frame.used();
+    {
+        let scratch = frame.scratch();
+        assert_eq!(scratch.used(), 0);
+        assert_eq!(scratch.capacity(), 256 - mark);
+        let temp = scratch.alloc_copy(&[1u32, 2, 3])?;
+        assert_eq!(temp.iter().sum::<u32>(), 6);
+        // The scratch has the rest of the block, no more.
+        assert_eq!(scratch.alloc::<u8>(256).err(), Some(Full(())));
+    }
+    // Back exactly where it was, and the earlier piece is untouched.
+    assert_eq!(frame.used(), mark);
+    assert_eq!(*kept, 7);
+    assert_eq!(frame.remaining(), 256 - mark);
+    Ok(())
+}
+
+#[test]
+fn scratch_scopes_nest() -> Result<(), Full<()>> {
+    let mut block = Memory::<u8, 256>::new();
+    let mut frame = Arena::new(&mut block);
+    frame.alloc::<u8>(10)?;
+    {
+        let mut outer = frame.scratch();
+        outer.alloc::<u8>(20)?;
+        for _ in 0..3 {
+            let inner = outer.scratch();
+            assert_eq!(inner.capacity(), 226);
+            inner.alloc::<u8>(226)?;
+        }
+        assert_eq!(outer.used(), 20);
+    }
+    assert_eq!(frame.used(), 10);
+    Ok(())
+}
+
+#[test]
+fn growing_containers_work_in_a_scratch_scope() {
+    let mut block = Memory::<u8, 1024>::new();
+    let mut frame = Arena::new(&mut block);
+    for round in 0..4u32 {
+        let scratch = frame.scratch();
+        let mut visible = Vector::new(vas::Dynamic(&scratch));
+        for id in 0..100 {
+            assert!(visible.push(id * round).is_ok());
+        }
+        assert_eq!(visible.last(), Some(&(99 * round)));
+    }
+    // Every round got the whole block again.
+    assert_eq!(frame.used(), 0);
+}
+
+#[test]
+fn a_scratch_arena_moves_into_another_thread() -> Result<(), Full<()>> {
+    let mut block = Memory::<u8, 512>::new();
+    let mut worker = Arena::new(&mut block);
+    std::thread::scope(|scope| {
+        let scratch = worker.scratch();
+        let job = scope.spawn(move || scratch.alloc_copy(&[5u64; 8]).map(|values| values.len()));
+        assert_eq!(job.join().ok(), Some(Ok(8)));
+    });
+    assert_eq!(worker.used(), 0);
+    Ok(())
 }

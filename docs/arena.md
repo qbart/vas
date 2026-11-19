@@ -128,6 +128,58 @@ assert!(visible.push(7u32).is_ok());
   whole arena is thrown away, so this suits per-frame and per-level arenas.
 - When the block is used up the container reports `Full`.
 
+## Scratch scopes
+
+`arena.scratch()` opens a scope for temporary work: an arena over the bytes
+this one has not handed out yet. Everything taken from it comes back when the
+scope ends, so nested scratch work inside one frame needs no size chosen up
+front (which `sub` does).
+
+```rust
+let mut frame = Arena::new(&mut block);
+let kept = frame.alloc::<Unit>(64)?;
+let mark = frame.used();
+{
+    let scratch = frame.scratch();
+    let mut visible = Vector::new(Dynamic(&scratch));
+    let mut inner = scratch.sub(KB(1))?;
+    let deeper = inner.scratch(); // scopes nest
+}
+assert_eq!(frame.used(), mark);
+```
+
+- Opening and closing are O(1): the scratch arena starts where the parent's
+  `used` is, and the parent's `used` is never changed by the scope, so
+  afterwards it is exactly its value at the mark.
+- The scratch arena borrows the parent mutably, and its pieces carry that
+  borrow. Rust therefore rejects any use of the parent while a scratch piece
+  or a `Dynamic(&scratch)` container is still alive: nothing handed out in
+  the scope can be reached after it. No `unsafe` rewind is needed.
+- The same borrow means the parent cannot be used during the scope either,
+  including `Dynamic(&parent)` containers created before it; create them
+  inside the scope instead, or after it.
+- Values stored in a scratch arena are not dropped, as with any arena.
+
+## Threads
+
+`Arena` is `Send` but not `Sync`. A job system gives each worker its own
+arena for the frame, a `sub` of the frame's arena or a scratch scope, and
+moves it into the worker's thread or job:
+
+```rust
+let frame = Arena::new(&mut block);
+let workers = [frame.sub(KB(64))?, frame.sub(KB(64))?];
+std::thread::scope(|scope| {
+    for worker in workers {
+        scope.spawn(move || work(&worker));
+    }
+});
+```
+
+Sharing one `&Arena` between threads does not compile, and neither does
+moving a `Dynamic(&arena)` container to another thread: one arena is only
+ever used by one thread at a time, so it needs no atomics.
+
 ## Freeing and starting over
 
 - Individual pieces are never freed.
@@ -149,6 +201,7 @@ assert!(visible.push(7u32).is_ok());
 | one value | `alloc_value(T) -> Result<&'a mut T, Full<T>>` | returns the value when it does not fit; never dropped |
 | copy of a slice | `alloc_copy(&[T]) -> Result<&'a mut [T], Full<()>>` | `T: Copy` |
 | budget | `sub(bytes) -> Result<Arena<'a>, Full<()>>` | splits off part as its own arena |
+| scratch scope | `scratch(&mut self) -> Arena<'_>` | the rest of the block, given back when it ends; O(1) |
 | heap, forever | `Arena::from_heap(bytes) -> Result<Arena<'static>, Full<()>>` | `alloc` feature; never freed |
 | heap, owned | `HeapBlock::new(bytes) -> Result<HeapBlock, Full<()>>`, `capacity()` | `alloc` feature; freed on drop; derefs to `[MaybeUninit<u8>]` |
 | static block | `StaticBlock::<N>::new()`, `take() -> Option<&'static mut [MaybeUninit<u8>]>` | declare as a `static`; taken once |
@@ -158,3 +211,4 @@ assert!(visible.push(7u32).is_ok());
 - No allocation unless `from_heap` or `HeapBlock::new` is called; no panics.
 - Pieces are disjoint and correctly aligned.
 - A failed request changes nothing.
+- `Send`, not `Sync`.

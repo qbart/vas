@@ -58,7 +58,26 @@ use crate::allocator::Allocator;
 /// Individual pieces are never freed, and values stored with
 /// [`alloc_value`](Self::alloc_value) are never dropped. To start over,
 /// create a new arena on the same block; Rust only allows that once
-/// everything that used the old pieces is gone.
+/// everything that used the old pieces is gone. For temporary work inside
+/// one arena, [`scratch`](Self::scratch) gives everything back at the end of
+/// a scope.
+///
+/// # Threads
+///
+/// An arena is `Send`: give each worker thread or job its own, for example
+/// a [`sub`](Self::sub) of the frame's arena or a [`scratch`](Self::scratch)
+/// scope, and move it there. It is not `Sync`, so one arena is never used
+/// from two threads at once:
+///
+/// ```compile_fail
+/// use vas::{Arena, Memory};
+///
+/// let mut block = Memory::<u8, 64>::new();
+/// let arena = Arena::new(&mut block);
+/// std::thread::scope(|scope| {
+///     scope.spawn(|| arena.alloc::<u8>(8).is_ok()); // `&Arena` is not `Send`
+/// });
+/// ```
 pub struct Arena<'a> {
     // Invariant: `start..start + capacity` is the block, exclusively
     // borrowed for `'a`, and `start..start + used` has been handed out.
@@ -172,7 +191,69 @@ impl<'a> Arena<'a> {
     pub fn sub(&self, bytes: usize) -> Result<Arena<'a>, Full<()>> {
         self.alloc::<u8>(bytes).map(Arena::new)
     }
+
+    /// Opens a scratch scope: an arena over all the bytes this one has not
+    /// handed out yet. Everything taken from it comes back when the scope
+    /// ends, so nested temporary work inside a frame needs no size chosen
+    /// up front. O(1).
+    ///
+    /// The scratch arena and its pieces borrow this arena mutably, so this
+    /// arena cannot be used until they are all gone. Its [`used`](Self::used)
+    /// is never changed by the scope, so afterwards it is exactly what it
+    /// was before. Values stored in the scratch arena are not dropped.
+    ///
+    /// ```
+    /// use vas::{Arena, Dynamic, Memory, Vector};
+    ///
+    /// # fn main() -> Result<(), vas::Full<()>> {
+    /// let mut block = Memory::<u8, 4096>::new();
+    /// let mut frame = Arena::new(&mut block);
+    /// let kept = frame.alloc::<u32>(16)?;
+    /// let mark = frame.used();
+    /// {
+    ///     let scratch = frame.scratch();
+    ///     let mut visible = Vector::new(Dynamic(&scratch));
+    ///     visible.push(7u32).map_err(|_| vas::Full(()))?;
+    ///     let mut nested = Arena::new(scratch.alloc(64)?);
+    ///     let _deeper = nested.scratch();
+    /// }
+    /// assert_eq!(frame.used(), mark);
+    /// # let _ = kept;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// A piece cannot outlive the scope:
+    ///
+    /// ```compile_fail
+    /// use vas::{Arena, Memory};
+    ///
+    /// let mut block = Memory::<u8, 64>::new();
+    /// let mut frame = Arena::new(&mut block);
+    /// let piece = frame.scratch().alloc_value(1u32);
+    /// let reused = frame.alloc_value(2u32); // the scratch bytes again
+    /// drop((piece, reused));
+    /// ```
+    #[inline]
+    pub fn scratch(&mut self) -> Arena<'_> {
+        let used = self.used.get();
+        Arena {
+            // In bounds or one past the end: `used <= capacity`.
+            start: self.start.wrapping_add(used),
+            capacity: self.capacity - used,
+            used: Cell::new(0),
+            marker: PhantomData,
+        }
+    }
 }
+
+// SAFETY: an arena is the exclusive borrow of the part of its block it has
+// not handed out yet (`&'a mut [MaybeUninit<u8>]`, which is `Send`) plus a
+// counter; pieces already handed out are separate borrows that never
+// overlap what it hands out next. Moving it to another thread moves that
+// exclusive access with it. It stays `!Sync` through `Cell`, so `&Arena`
+// (and with it every `Dynamic(&arena)` container) cannot cross threads.
+unsafe impl Send for Arena<'_> {}
 
 /// An arena is an [`Allocator`]: containers with
 /// [`Dynamic`](crate::Dynamic) storage can grow inside it.
