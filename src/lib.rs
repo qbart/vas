@@ -27,6 +27,7 @@ pub mod orthtree;
 pub mod path;
 pub mod pool;
 pub mod random;
+pub mod search;
 pub mod sort;
 pub mod sparse_set;
 pub mod spatial_grid;

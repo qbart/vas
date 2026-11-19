@@ -130,6 +130,46 @@ pub fn stable_in<T>(
     merge_sort(items, scratch, &mut by(compare));
 }
 
+/// The three parts of a slice after selection: the elements before the
+/// `index`th, that element, and the elements after it.
+pub type Selected<'a, T> = (&'a mut [T], &'a mut T, &'a mut [T]);
+
+/// Reorders `items` so that the element at `index` is the one a sort would
+/// put there, with no greater element before it and no smaller one after.
+/// Returns the elements before it, it, and the elements after it; `None`,
+/// with nothing changed, when `index` is out of range (where `core`'s
+/// panics).
+///
+/// O(n) in the worst case: a quickselect that falls back to a median of
+/// medians pivot. It never panics, keeps every element when the
+/// comparison panics, and puts equal elements in the same order on every
+/// target. Find a median, the k nearest, the top k scores.
+#[inline]
+pub fn select_nth_unstable<T: Ord>(items: &mut [T], index: usize) -> Option<Selected<'_, T>> {
+    select_nth(items, index, &mut T::lt)
+}
+
+/// [`select_nth_unstable`] by `compare`.
+#[inline]
+pub fn select_nth_unstable_by<T>(
+    items: &mut [T],
+    index: usize,
+    compare: impl FnMut(&T, &T) -> Ordering,
+) -> Option<Selected<'_, T>> {
+    select_nth(items, index, &mut by(compare))
+}
+
+/// [`select_nth_unstable`] by the key `key` gives. The key is computed on
+/// every comparison.
+#[inline]
+pub fn select_nth_unstable_by_key<T, K: Ord>(
+    items: &mut [T],
+    index: usize,
+    mut key: impl FnMut(&T) -> K,
+) -> Option<Selected<'_, T>> {
+    select_nth(items, index, &mut |a: &T, b: &T| key(a) < key(b))
+}
+
 /// `less` from a comparison.
 #[inline]
 fn by<T>(mut compare: impl FnMut(&T, &T) -> Ordering) -> impl FnMut(&T, &T) -> bool {
@@ -250,6 +290,110 @@ fn quicksort<'a, T>(
         quicksort(right, Some(pivot), limit, less);
         items = left;
     }
+}
+
+// Selection ------------------------------------------------------------
+
+/// Quickselect hands slices up to this long to insertion sort.
+const SELECT_SMALL: usize = 16;
+
+fn select_nth<'a, T>(
+    items: &'a mut [T],
+    index: usize,
+    less: &mut impl FnMut(&T, &T) -> bool,
+) -> Option<Selected<'a, T>> {
+    if index >= items.len() {
+        return None;
+    }
+    // Zero-sized elements are all the same value.
+    if size_of::<T>() != 0 {
+        quickselect(items, index, None, less);
+    }
+    let (left, rest) = items.split_at_mut_checked(index)?;
+    let (nth, right) = rest.split_first_mut()?;
+    Some((left, nth, right))
+}
+
+/// Puts the `index`th smallest element of `items` at `index`, the smaller
+/// ones before it and the larger after. `ancestor`, as in [`quicksort`], is
+/// a pivot no element of `items` is less than.
+fn quickselect<'a, T>(
+    mut items: &'a mut [T],
+    mut index: usize,
+    mut ancestor: Option<&'a T>,
+    less: &mut impl FnMut(&T, &T) -> bool,
+) {
+    // Unbalanced partitions (keeping more than 7/8 of the slice) allowed
+    // with a cheap pivot; after them every pivot is a median of medians,
+    // which guarantees progress. Balanced ones shrink the slice
+    // geometrically, so the total is O(n) in the worst case.
+    let mut unbalanced = 8u32;
+    loop {
+        let len = items.len();
+        if len <= SELECT_SMALL {
+            insertion(items, less);
+            return;
+        }
+        let pivot = if unbalanced > 0 {
+            choose_pivot(items, less)
+        } else {
+            median_of_medians(items, less)
+        };
+        if let (Some(before), Some(chosen)) = (ancestor, items.get(pivot))
+            && !less(before, chosen)
+        {
+            // The pivot equals the ancestor, the smallest value here: put
+            // the elements equal to it first. If `index` is among them, done.
+            let equal = partition(items, pivot, &mut |x: &T, p: &T| !less(p, x));
+            if index <= equal {
+                return;
+            }
+            let rest = items;
+            items = rest.get_mut(equal + 1..).unwrap_or_default();
+            index -= equal + 1;
+            ancestor = None;
+        } else {
+            let mid = partition(items, pivot, less);
+            let rest = items;
+            let Some((left, right)) = rest.split_at_mut_checked(mid) else {
+                return;
+            };
+            let Some((pivot, right)) = right.split_first_mut() else {
+                return;
+            };
+            match index.cmp(&mid) {
+                Ordering::Equal => return,
+                Ordering::Less => items = left,
+                Ordering::Greater => {
+                    items = right;
+                    index -= mid + 1;
+                    ancestor = Some(pivot);
+                }
+            }
+        }
+        if items.len() > len - len / 8 {
+            unbalanced = unbalanced.saturating_sub(1);
+        }
+    }
+}
+
+/// The index of a pivot that is guaranteed to have at least 3/10 of the
+/// elements on each side: the median of the medians of groups of five.
+/// Moves those medians to the front of `items`.
+fn median_of_medians<T>(items: &mut [T], less: &mut impl FnMut(&T, &T) -> bool) -> usize {
+    let groups = items.len() / 5;
+    for group in 0..groups {
+        let start = group * 5;
+        if let Some(five) = items.get_mut(start..start + 5) {
+            insertion(five, less);
+        }
+        // `group <= start`: a slot of a group already done.
+        items.swap(group, start + 2);
+    }
+    if let Some(medians) = items.get_mut(..groups) {
+        quickselect(medians, groups / 2, None, less);
+    }
+    groups / 2
 }
 
 /// The index of a pivot close to the median.

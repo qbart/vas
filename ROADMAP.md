@@ -216,7 +216,10 @@
 
 ## 0.39.0 — vas's own searches
 
-- [ ] `binary_search` and `select_nth_unstable` that do not come from `core`
+- [x] `vas::search`: `binary_search*` and `partition_point`, the first match, branch-free; 1.3x faster than `core`'s
+- [x] `sort::select_nth_unstable*`: quickselect with a median of medians fallback, O(n) worst case (tested against McIlroy's adversary), `None` instead of a panic; 1.3x faster than `core`'s
+- [x] The same methods on `Vector`; `Bvh`, `KdTree` and `OrderedMap` use them
+- [x] `make check` builds the docs with warnings denied
 
 ## Quality
 

@@ -108,9 +108,29 @@ has a buffer. Use `unstable` unless equal elements must keep their order,
 and often a tie-breaker in the key (`(depth, entity_id)`) makes the unstable
 result exactly the stable one.
 
+## Selection
+
+`select_nth_unstable(items, i)` (and `_by`, `_by_key`; the same methods on
+`Vector`) puts the element a sort would put at `i` in place, no greater
+element before it and no smaller one after, and returns the three parts.
+It finds a median, the k nearest or the top k scores without sorting.
+
+- `None`, with nothing changed, when `i` is out of range; `core`'s panics.
+- Quickselect with the quicksort's pivot, partition and equal-pivot
+  skipping. After 8 partitions that keep more than 7/8 of the slice, every
+  pivot is a median of medians of five, so the worst case is O(n), also
+  against an adversary that picks values as they are compared (a test
+  runs McIlroy's): about 14 comparisons per element there, against about 3
+  on random input.
+- The same guarantees as the sorts: no panics on a bad comparison, every
+  element kept if it panics, the same result on every target.
+
+0.6 ns per element for the median of 100,000 `u32`, against 0.8 for
+`core`'s.
+
 ## Not included
 
 - Sorting a `Deque` in place without `make_contiguous`: a ring is not a
   slice.
-- `select_nth_unstable` and `binary_search`: still the slice's, through
-  `Deref`.
+- Partial sorting (the k smallest, in order): select the kth, then sort
+  the part before it.

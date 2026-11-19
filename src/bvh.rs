@@ -6,6 +6,7 @@ use core::mem::MaybeUninit;
 use core::{fmt, slice};
 
 use crate::aabb::Aabb;
+use crate::sort;
 
 /// "No child": marks a leaf.
 const NONE: u32 = u32::MAX;
@@ -325,12 +326,10 @@ impl<'a, T, const D: usize> Bvh<'a, T, D> {
                 .max_by(|a, b| a.1.total_cmp(&b.1))
                 .map_or(0, |(axis, _)| axis);
             let half = count / 2;
-            if (half as usize) < items.len() {
-                let center = |aabb: &Aabb<D>| aabb.center().get(axis).copied().unwrap_or(0.0);
-                items.select_nth_unstable_by(half as usize, |a, b| {
-                    center(&a.0).total_cmp(&center(&b.0))
-                });
-            }
+            let center = |aabb: &Aabb<D>| aabb.center().get(axis).copied().unwrap_or(0.0);
+            sort::select_nth_unstable_by(items, half as usize, |a, b| {
+                center(&a.0).total_cmp(&center(&b.0))
+            });
             let left = *used;
             *used += 2;
             node.left = left;

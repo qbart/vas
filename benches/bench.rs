@@ -962,6 +962,49 @@ fn lru() {
     );
 }
 
+/// Binary search in 100k sorted keys, and the median of 100k (8 inputs in
+/// turn, so the branch predictor cannot learn one).
+fn search() {
+    const N: usize = 100_000;
+    let mut rng = Rng::new(14);
+    let mut sorted: Vec<u32> = (0..N).map(|_| rng.u32()).collect();
+    sorted.sort_unstable();
+    let targets: Vec<u32> = (0..N).map(|_| rng.u32()).collect();
+    let group = "binary search 100k sorted u32";
+    bench(group, "vas::search::binary_search", N, || {
+        targets
+            .iter()
+            .map(|t| vas::search::binary_search(&sorted, t).unwrap_or_else(|i| i) as u64)
+            .sum()
+    });
+    bench(group, "core slice binary_search", N, || {
+        targets
+            .iter()
+            .map(|t| sorted.binary_search(t).unwrap_or_else(|i| i) as u64)
+            .sum()
+    });
+
+    let inputs: Vec<Vec<u32>> = (0..8)
+        .map(|_| (0..N).map(|_| rng.u32()).collect())
+        .collect();
+    let mut work = inputs[0].clone();
+    let turn = std::cell::Cell::new(0);
+    let next = |work: &mut Vec<u32>| {
+        let input = &inputs[turn.get() % inputs.len()];
+        turn.set(turn.get() + 1);
+        work.copy_from_slice(input);
+    };
+    let group = "median of 100k u32";
+    bench(group, "vas::sort::select_nth_unstable", N, || {
+        next(&mut work);
+        vas::sort::select_nth_unstable(&mut work, N / 2).map_or(0, |(_, m, _)| u64::from(*m))
+    });
+    bench(group, "core select_nth_unstable", N, || {
+        next(&mut work);
+        u64::from(*work.select_nth_unstable(N / 2).1)
+    });
+}
+
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -977,6 +1020,7 @@ fn main() {
     map::<2_000>();
     map::<50_000>();
     sort();
+    search();
     ordered_map();
     pool();
     bitset();

@@ -9,7 +9,7 @@ use core::{fmt, ptr, slice};
 
 use crate::allocator::Allocator;
 use crate::storage::{Allocation, Buffer, Dynamic, Inline, IntoBuffer, Storage};
-use crate::{Full, InsertError, sort};
+use crate::{Full, InsertError, search, sort};
 
 /// A contiguous vector.
 ///
@@ -532,6 +532,76 @@ impl<T, S: Storage<T>> Vector<T, S> {
     #[inline]
     pub fn sort_stable_by_key<K: Ord>(&mut self, key: impl FnMut(&T) -> K) {
         sort::stable_by_key(self.as_mut_slice(), key);
+    }
+
+    /// Reorders the elements so that the one at `index` is the one a sort
+    /// would put there, no greater element before it and no smaller after;
+    /// returns the three parts. vas's own, not the slice's: `None` instead
+    /// of a panic when `index` is out of range, O(n) worst case. See
+    /// [`sort::select_nth_unstable`].
+    #[inline]
+    pub fn select_nth_unstable(&mut self, index: usize) -> Option<sort::Selected<'_, T>>
+    where
+        T: Ord,
+    {
+        sort::select_nth_unstable(self.as_mut_slice(), index)
+    }
+
+    /// [`select_nth_unstable`](Self::select_nth_unstable) by `compare`.
+    #[inline]
+    pub fn select_nth_unstable_by(
+        &mut self,
+        index: usize,
+        compare: impl FnMut(&T, &T) -> Ordering,
+    ) -> Option<sort::Selected<'_, T>> {
+        sort::select_nth_unstable_by(self.as_mut_slice(), index, compare)
+    }
+
+    /// [`select_nth_unstable`](Self::select_nth_unstable) by the key `key`
+    /// gives.
+    #[inline]
+    pub fn select_nth_unstable_by_key<K: Ord>(
+        &mut self,
+        index: usize,
+        key: impl FnMut(&T) -> K,
+    ) -> Option<sort::Selected<'_, T>> {
+        sort::select_nth_unstable_by_key(self.as_mut_slice(), index, key)
+    }
+
+    /// Searches the sorted elements for `target`: `Ok` with the index of the
+    /// **first** equal element, else `Err` with where it would go. vas's
+    /// own, not the slice's (which may return any equal element). See
+    /// [`crate::search`].
+    #[inline]
+    pub fn binary_search(&self, target: &T) -> Result<usize, usize>
+    where
+        T: Ord,
+    {
+        search::binary_search(self.as_slice(), target)
+    }
+
+    /// [`binary_search`](Self::binary_search) with `compare`, which orders
+    /// an element against the target.
+    #[inline]
+    pub fn binary_search_by(&self, compare: impl FnMut(&T) -> Ordering) -> Result<usize, usize> {
+        search::binary_search_by(self.as_slice(), compare)
+    }
+
+    /// [`binary_search`](Self::binary_search) for elements sorted by `key`.
+    #[inline]
+    pub fn binary_search_by_key<K: Ord>(
+        &self,
+        target: &K,
+        key: impl FnMut(&T) -> K,
+    ) -> Result<usize, usize> {
+        search::binary_search_by_key(self.as_slice(), target, key)
+    }
+
+    /// The first index where `predicate` is `false`, when the elements for
+    /// which it is `true` all come first. O(log n).
+    #[inline]
+    pub fn partition_point(&self, predicate: impl FnMut(&T) -> bool) -> usize {
+        search::partition_point(self.as_slice(), predicate)
     }
 
     /// The contents as one contiguous slice.

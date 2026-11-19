@@ -63,7 +63,7 @@ fixed storage the cost is the same without the word.
 
 | Structure | Insert | Remove | Lookup | Iterate | Use it for |
 |---|---|---|---|---|---|
-| `Vector` | push O(1) amortised, insert at i O(n) | pop, `swap_remove` O(1); remove at i O(n) | by index O(1); `binary_search` on sorted O(log n) | O(n), contiguous | particles, draw lists, anything walked every frame |
+| `Vector` | push O(1) amortised, insert at i O(n) | pop, `swap_remove` O(1); remove at i O(n) | by index O(1); `binary_search` on sorted O(log n), first match | O(n), contiguous | particles, draw lists, anything walked every frame |
 | `String` | push O(1) amortised; insert at i O(n) | pop O(1); remove at i O(n) | as `&str` O(1) | O(n) | names, labels, chat, text input, HUD text, map keys |
 | `Pool` | O(1) | O(1) | by handle O(1), stale handles detected | O(c) | entities, bullets, sounds: anything referred to by id |
 | `Map` | O(1) average | O(1) average | O(1) average | O(c) | id to entity, name to asset, tile to state |
@@ -97,6 +97,8 @@ fixed storage the cost is the same without the word.
 | `Traversal` depth first | O(nodes + edges reached), no recursion | reachability, dependency walks, maze generation |
 | `Traversal` topological order | O(nodes + edges) | build orders, tech trees, system update order |
 | `sort::unstable` (quicksort) | O(n log n) worst case, O(n) sorted, no memory | draw-call order, depth sorting, sorting before `dedup` or binary search; same result on every machine |
+| `sort::select_nth_unstable` (quickselect, median of medians fallback) | O(n) worst case, no memory | medians, k nearest, top k scores, splitting point sets (`KdTree`, `Bvh` use it) |
+| `search::binary_search`, `partition_point` | O(log n), branch-free | lookups in sorted tables, keyframes, cumulative weights for random picks; always the first match |
 | `sort::stable`, `stable_in` (merge sort) | O(n log n) comparisons; moves O(n log² n) without scratch, O(n log n) with n / 2 | ordering by one field while keeping an earlier order: UI lists, sorting by layer after sorting by name |
 
 Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
@@ -108,7 +110,8 @@ Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
 | `Vector`, any slice | `sort_unstable` / `sort::unstable` (quicksort, no memory, never panics) | O(n log n) worst case; O(n) when sorted or reversed; O(n log k) for k distinct keys |
 | `Vector`, any slice | `sort_stable` / `sort::stable` (merge sort, no memory) | O(n log n) comparisons, O(n log² n) moves; O(n) when sorted |
 | `Vector`, any slice | `sort_stable_in` / `sort::stable_in` (scratch from the caller) | O(n log n) with n / 2 scratch |
-| `Vector` | slice `binary_search`, `select_nth_unstable` | O(log n), O(n) |
+| `Vector`, any slice | `binary_search` / `search::binary_search` (first match, branch-free), `partition_point` | O(log n) |
+| `Vector`, any slice | `select_nth_unstable` / `sort::select_nth_unstable` (no panic out of range) | O(n) worst case |
 | `Deque` | `retain`; `make_contiguous` | O(n); O(capacity) when wrapped |
 | `Pool`, `Map` | `retain` | O(capacity) |
 | `SparseSet` | `retain` | O(n) |
@@ -126,7 +129,8 @@ Algorithms so far:
 - `FlowField`: the way to the nearest goal from every node at once
 - `Traversal`: breadth first, depth first, topological order over graphs and grids
 - `grid::line`, `Grid::line_of_sight`, `Grid::field_of_view`: lines and sight on tile grids
-- `sort`: quicksort and stable merge sort on any slice; never panic, no allocation
+- `sort`: quicksort, stable merge sort and selection on any slice; never panic, no allocation
+- `search`: binary search returning the first match
 
 Runnable samples for every structure are in [examples](examples); run one
 with `cargo run --example containers` (or `arena`, `hierarchy`, `pathfinding`,

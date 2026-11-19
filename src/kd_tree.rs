@@ -1,8 +1,8 @@
 //! k-d tree for nearest-neighbour search over user-provided memory.
 
-use crate::Vector;
 use crate::aabb::{Aabb, distance_squared};
 use crate::storage::Storage;
+use crate::{Vector, sort};
 
 /// A search result: the index of an item in [`KdTree::items`] and its
 /// squared distance from the query point.
@@ -261,8 +261,11 @@ fn arrange<T, const D: usize>(items: &mut [([f32; D], T)], depth: usize) {
     }
     let middle = items.len() / 2;
     let coordinate = |item: &([f32; D], T)| item.0.get(axis).copied().unwrap_or(0.0);
-    let (lower, _, upper) =
-        items.select_nth_unstable_by(middle, |a, b| coordinate(a).total_cmp(&coordinate(b)));
-    arrange(lower, depth + 1);
-    arrange(upper, depth + 1);
+    let parts = sort::select_nth_unstable_by(items, middle, |a, b| {
+        coordinate(a).total_cmp(&coordinate(b))
+    });
+    if let Some((lower, _, upper)) = parts {
+        arrange(lower, depth + 1);
+        arrange(upper, depth + 1);
+    }
 }

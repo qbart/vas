@@ -56,7 +56,9 @@ what makes it suitable for handing data to a renderer.
 | sort | `sort_unstable()`, `sort_unstable_by(cmp)`, `sort_unstable_by_key(key)` | vas's quicksort ([sort](sort.md)), not the slice's: never panics, same order of equal elements everywhere; O(n log n) worst case, no memory; as fast as `core`'s |
 | stable sort | `sort_stable()`, `sort_stable_by(cmp)`, `sort_stable_by_key(key)` | equal elements keep their order; no memory needed; O(n log n) comparisons, O(n log² n) moves |
 | stable sort, faster | `sort_stable_in(&mut [MaybeUninit<T>], cmp)` | uses the scratch memory you pass, any size; with room for n / 2 elements O(n log n) moves; 4x faster than without |
-| slice algorithms | `binary_search*`, `select_nth_unstable`, `reverse`, `rotate_*`, `contains`, `iter().position` | from the slice, through `Deref`
+| select | `select_nth_unstable(i)`, `_by(cmp)`, `_by_key(key)` | vas's ([sort](sort.md#selection)): `None` instead of a panic when `i` is out of range; O(n) worst case |
+| search | `binary_search(&x)`, `_by(cmp)`, `_by_key(&k, key)`, `partition_point(pred)` | vas's ([search](search.md)): the **first** match; O(log n), branch-free |
+| slice algorithms | `reverse`, `rotate_*`, `contains`, `iter().position` | from the slice, through `Deref`
 
 ## Growing
 

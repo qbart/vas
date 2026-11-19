@@ -30,6 +30,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
 | `Vector::sort_unstable` (vas quicksort) | `core` `sort_unstable` | same speed |
+| `sort::select_nth_unstable` (median, 100k) | `core` `select_nth_unstable` | 1.3x faster |
+| `search::binary_search` (100k) | `core` `binary_search` | 1.3x faster |
 | `Vector::sort_stable_in` | std `sort_by_key` | 1.5x slower at 1k, 2x to 4.5x at 100k; no allocation |
 | `TreeMap` inserts and removes | `BTreeMap` | level to 1.2x slower |
 | `TreeMap` lookups | `BTreeMap` | 1.6x slower at 1k, 1.5x faster at 16k |
@@ -159,6 +161,10 @@ looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 | sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (n/2 scratch) | 22.1 |
 | sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (256 scratch) | 26.1 |
 | sort 100000 (u32, u32) by key, all distinct | std sort_by_key (allocates) | 11.0 |
+| binary search 100k sorted u32 | vas::search::binary_search | 11.8 |
+| binary search 100k sorted u32 | core slice binary_search | 15.6 |
+| median of 100k u32 | vas::sort::select_nth_unstable | 0.6 |
+| median of 100k u32 | core select_nth_unstable | 0.8 |
 | ordered 32: build | vas::OrderedMap | 10.6 |
 | ordered 32: build | vas::TreeMap | 8.4 |
 | ordered 32: build | std BTreeMap | 13.5 |
