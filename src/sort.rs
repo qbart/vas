@@ -114,9 +114,11 @@ pub fn stable_by_key<T, K: Ord>(items: &mut [T], mut key: impl FnMut(&T) -> K) {
 }
 
 /// Sorts `items` by `compare`, keeping equal elements in their order,
-/// using `scratch` to go faster. Any amount of scratch memory works; with
-/// room for half the elements every merge uses it, and the sort is
-/// O(n log n) moves instead of O(n log² n).
+/// using `scratch` to go faster. Any amount of scratch memory works. Pieces
+/// as long as the scratch are sorted by a stable quicksort through it (k
+/// distinct keys cost O(n log k)) and then merged; with room for half the
+/// elements every merge uses it too, and the sort is O(n log n) moves
+/// instead of O(n log² n). Room for every element is fastest.
 ///
 /// `scratch` is only borrowed for the call: pass a `Memory` block, an arena
 /// piece or any `&mut [MaybeUninit<T>]`. Its contents are not read and are
@@ -841,20 +843,61 @@ const fn run_len<T>() -> usize {
 
 /// Sorts `items` so that `less(b, a)` holds for no `a` before `b`; equal
 /// elements keep their order. Uses as much of `scratch` as helps.
+///
+/// Input that is one run already, ascending or strictly descending, takes
+/// one pass. Otherwise pieces as long as the scratch memory are sorted by
+/// a stable quicksort through it, and the pieces merged; with too little
+/// scratch memory for that, runs of [`run_len`] are sorted by
+/// [`small_sort`] and merged.
 fn merge_sort<T>(
     items: &mut [T],
     scratch: &mut [MaybeUninit<T>],
     less: &mut impl FnMut(&T, &T) -> bool,
 ) {
-    let len = items.len();
-    if size_of::<T>() == 0 {
+    if size_of::<T>() == 0 || in_one_run(items, less) {
         return;
     }
     let run = run_len::<T>();
-    for chunk in items.chunks_mut(run) {
-        small_sort(chunk, less);
+    let piece = scratch.len().min(items.len());
+    if piece > 2 * run {
+        for chunk in items.chunks_mut(piece) {
+            if !in_one_run(chunk, less) {
+                let limit = 2 * chunk.len().ilog2();
+                stable_quicksort(chunk, scratch, limit, None, less);
+            }
+        }
+        merge_up(items, piece, scratch, less);
+    } else {
+        for chunk in items.chunks_mut(run) {
+            small_sort(chunk, less);
+        }
+        merge_up(items, run, scratch, less);
     }
-    let mut width = run;
+}
+
+/// `true` when `items` is sorted already, after reversing it if it was
+/// strictly descending (which keeps equal elements in order: there are
+/// none next to each other). Stops at the first element out of order.
+fn in_one_run<T>(items: &mut [T], less: &mut impl FnMut(&T, &T) -> bool) -> bool {
+    let (run, descending) = existing_run(items, less);
+    if run < items.len() {
+        return false;
+    }
+    if descending {
+        items.reverse();
+    }
+    true
+}
+
+/// Merges the sorted runs of `items`, each `width` long (the last one
+/// maybe shorter), pair by pair until one is left.
+fn merge_up<T>(
+    items: &mut [T],
+    mut width: usize,
+    scratch: &mut [MaybeUninit<T>],
+    less: &mut impl FnMut(&T, &T) -> bool,
+) {
+    let len = items.len();
     while width < len {
         let mut start = 0;
         while start + width < len {
@@ -865,6 +908,206 @@ fn merge_sort<T>(
             start = end;
         }
         width = width.saturating_mul(2);
+    }
+}
+
+/// A stable quicksort through `scratch`, which holds at least as many
+/// elements as `items`.
+///
+/// Each step partitions around a pivot into the elements less than it and
+/// the rest, keeping their order ([`stable_partition`]). `ancestor` is the
+/// position in `items` of the pivot of the step before, when that pivot
+/// is the smallest element here: if the new pivot equals it, every element
+/// equal to it is taken out at once instead, so that many equal keys cost
+/// one pass. Past `limit` steps deep it falls back to merging, so the
+/// sort stays O(n log n) whatever the input or the comparison.
+fn stable_quicksort<T>(
+    mut items: &mut [T],
+    scratch: &mut [MaybeUninit<T>],
+    mut limit: u32,
+    mut ancestor: Option<usize>,
+    less: &mut impl FnMut(&T, &T) -> bool,
+) {
+    let run = run_len::<T>();
+    loop {
+        let len = items.len();
+        if len <= run || scratch.len() < len {
+            small_or_merge(items, scratch, less);
+            return;
+        }
+        if limit == 0 {
+            for chunk in items.chunks_mut(run) {
+                small_sort(chunk, less);
+            }
+            merge_up(items, run, scratch, less);
+            return;
+        }
+        limit -= 1;
+        let pivot = choose_pivot(items, less);
+        let equal = match ancestor.and_then(|at| items.get(at)).zip(items.get(pivot)) {
+            // The ancestor is the smallest element: equal when not less.
+            Some((smallest, pivot)) => !less(smallest, pivot),
+            None => false,
+        };
+        if !equal {
+            // SAFETY: `pivot < len`, and the scratch memory holds `len`.
+            let split = unsafe { stable_partition(items, scratch, pivot, ancestor, false, less) };
+            if split.left > 0 {
+                // The left part is less than the pivot, the right part not
+                // less; the pivot is now the smallest of the right part.
+                let (left, right) = items.split_at_mut(split.left);
+                stable_quicksort(right, scratch, limit, Some(split.pivot - split.left), less);
+                items = left;
+                ancestor = split.tracked.filter(|at| *at < split.left);
+                continue;
+            }
+            // Nothing is less than the pivot: it is the smallest, and the
+            // elements equal to it go next.
+        }
+        // Every element not greater than the pivot (so equal to it, as it
+        // is the smallest) goes left, in order, and is done.
+        let mut not_greater = |x: &T, pivot: &T| !less(pivot, x);
+        // SAFETY: as above.
+        let split =
+            unsafe { stable_partition(items, scratch, pivot, None, true, &mut not_greater) };
+        items = items.get_mut(split.left..).unwrap_or_default();
+        ancestor = None;
+    }
+}
+
+/// [`small_sort`] for short slices, else runs merged through `scratch`.
+fn small_or_merge<T>(
+    items: &mut [T],
+    scratch: &mut [MaybeUninit<T>],
+    less: &mut impl FnMut(&T, &T) -> bool,
+) {
+    let run = run_len::<T>();
+    for chunk in items.chunks_mut(run) {
+        small_sort(chunk, less);
+    }
+    merge_up(items, run, scratch, less);
+}
+
+/// Where [`stable_partition`] put things.
+struct Split {
+    /// How many elements went left.
+    left: usize,
+    /// The new position of the pivot.
+    pivot: usize,
+    /// The new position of the tracked element, if one was given.
+    tracked: Option<usize>,
+}
+
+/// Moves the elements for which `goes_left(element, pivot)` holds to the
+/// front of `items` and the others after them, each group in its original
+/// order. The pivot itself goes left when `pivot_left`, else right,
+/// whatever `goes_left` says, so both parts are shorter than `items` when
+/// the side it lands on is not alone. Also reports where the pivot and
+/// the element at `track` ended up.
+///
+/// Every element is copied once into `scratch`, the left ones from its
+/// start, the right ones from its end backwards, with no branch on
+/// `goes_left`; then all are copied back. `items` is only read until then,
+/// so if `goes_left` panics it still holds every element once.
+///
+/// # Safety
+///
+/// `pivot < items.len() <= scratch.len()`.
+unsafe fn stable_partition<T>(
+    items: &mut [T],
+    scratch: &mut [MaybeUninit<T>],
+    pivot: usize,
+    track: Option<usize>,
+    pivot_left: bool,
+    goes_left: &mut impl FnMut(&T, &T) -> bool,
+) -> Split {
+    let len = items.len();
+    let base = items.as_mut_ptr();
+    let out = scratch.as_mut_ptr().cast::<T>();
+    let track = track.filter(|at| *at < len && *at != pivot);
+    // The two positions where the loop stops to place an element by hand,
+    // in order, then the end.
+    let (first, second) = match track {
+        Some(at) if at < pivot => (at, pivot),
+        Some(at) => (pivot, at),
+        None => (pivot, len),
+    };
+    let mut left = 0;
+    // Where the pivot and the tracked element go, as (went left, place
+    // among those on its side); resolved once the number on the left is
+    // known.
+    let mut pivot_to = (false, 0);
+    let mut tracked_to = None;
+    // SAFETY: `i < len` for every read of `base + i`, and the writes go to
+    // `out + left` (left ones, `left <= i`) or `out + len - 1 - rights`
+    // (right ones, `rights = i - left`): distinct places below `len`, which
+    // the scratch memory holds. `pivot` points into `items`, which is not
+    // written until the copy back, after the last call to `goes_left`.
+    unsafe {
+        let pivot_ref = &*base.add(pivot);
+        let mut i = 0;
+        for stop in [first, second, len] {
+            // `back + left` is where the next right one goes: `back` steps
+            // down once per element, `left` up once per left one.
+            let mut back = out.add(len - i);
+            while i + 4 <= stop {
+                for _ in 0..4 {
+                    back = back.sub(1);
+                    let from = base.add(i);
+                    let is_left = goes_left(&*from, pivot_ref);
+                    let to = select(is_left, out, back).cast_mut();
+                    ptr::copy_nonoverlapping(from, to.add(left), 1);
+                    left += usize::from(is_left);
+                    i += 1;
+                }
+            }
+            while i < stop {
+                back = back.sub(1);
+                let from = base.add(i);
+                let is_left = goes_left(&*from, pivot_ref);
+                let to = select(is_left, out, back).cast_mut();
+                ptr::copy_nonoverlapping(from, to.add(left), 1);
+                left += usize::from(is_left);
+                i += 1;
+            }
+            if i >= len {
+                break;
+            }
+            let from = base.add(i);
+            let is_left = if i == pivot {
+                pivot_left
+            } else {
+                goes_left(&*from, pivot_ref)
+            };
+            let place = if is_left { left } else { i - left };
+            if i == pivot {
+                pivot_to = (is_left, place);
+            } else {
+                tracked_to = Some((is_left, place));
+            }
+            let to = if is_left {
+                out.add(left)
+            } else {
+                out.add(len - 1 - (i - left))
+            };
+            ptr::copy_nonoverlapping(from, to, 1);
+            left += usize::from(is_left);
+            i += 1;
+        }
+        // Back into `items`: the left ones in order, the right ones, stored
+        // from the end of the scratch memory backwards, reversed.
+        ptr::copy_nonoverlapping(out, base, left);
+        for k in 0..len - left {
+            ptr::copy_nonoverlapping(out.add(len - 1 - k), base.add(left + k), 1);
+        }
+    }
+    // A right one's place among the right ones is also its distance from
+    // the start of the right part.
+    let lands = |(is_left, place): (bool, usize)| if is_left { place } else { left + place };
+    Split {
+        left,
+        pivot: lands(pivot_to),
+        tracked: tracked_to.map(lands),
     }
 }
 

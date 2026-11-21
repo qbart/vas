@@ -32,7 +32,8 @@ using `core`'s:
 - **Panic safety.** If the comparison panics, every element is still in the
   slice exactly once and nothing is dropped twice.
 - **O(n log n)** comparisons in the worst case. Sorted or reversed input
-  takes O(n) for `unstable`, sorted input O(n) for `stable`.
+  takes O(n) for `unstable`, sorted input O(n) for `stable` (and reversed
+  input too when no two elements are equal).
 - **No allocation.** Scratch memory comes only from the caller.
 
 Zero-sized elements are left as they are.
@@ -73,20 +74,42 @@ branch costs about as much as sorting an element. So:
 A pass that reads the buffer and writes the slice holds a guard that copies
 the buffer back if the comparison panics.
 
-## Stable: merge sort
+## Stable: quicksort through scratch, then merges
 
-Runs of 32 small elements (or 16 larger ones) are sorted as above, which is
-stable, then merged pairwise. A merge whose shorter run fits in the scratch
-memory moves that run out and merges back in one branch-free pass.
-Otherwise it is done in place: split the longer run in the middle, binary
-search where that element belongs in the other, rotate the two middle
-pieces past each other, and repeat on both sides. Before the last merge the
-parts already in place are trimmed off.
+Input that is one run already (ascending, or strictly descending, which is
+reversed) is left after one pass.
+
+With scratch memory longer than 64 elements, the slice is cut into pieces
+as long as the scratch, and each piece is sorted by a **stable quicksort**:
+
+- a pivot is chosen as in the unstable sort;
+- every element is copied once into the scratch, those less than the pivot
+  from its start, the others from its end backwards, with no branch on the
+  comparison; then all are copied back, the second group reversed, so both
+  keep their order. Until the copy back the slice is only read, so a
+  panicking comparison leaves every element in it;
+- when a pivot equals the one of the step before (which is the smallest
+  element of its part), all elements equal to it are taken out in one
+  pass: k distinct keys cost O(n log k), not O(n log n). The earlier pivot
+  is found by its position, tracked through the partition, never by a copy
+  of it;
+- slices of 32 small elements (16 larger ones) go to the small sort below;
+  past 2 log₂ n steps deep it falls back to merging, so the sort stays
+  O(n log n) whatever the input or the comparison.
+
+The sorted pieces, and with less scratch runs of 32 small elements (16
+larger ones) sorted as above, are then merged pairwise. A merge whose
+shorter run fits in the scratch memory moves that run out and merges back
+in one branch-free pass. Otherwise it is done in place: split the longer
+run in the middle, binary search where that element belongs in the other,
+rotate the two middle pieces past each other, and repeat on both sides.
+Before each merge the parts already in place are trimmed off.
 
 | | Comparisons | Moves | Memory |
 |---|---|---|---|
 | `stable*` | O(n log n) | O(n log² n) | O(log n) stack |
 | `stable_in`, n / 2 scratch | O(n log n) | O(n log n) | the scratch |
+| `stable_in`, n scratch | O(n log n), O(n log k) for k keys | the same | the scratch, O(log n) stack |
 
 ## Speed
 
@@ -95,18 +118,23 @@ in turn (see [benchmarks](benchmarks.md)):
 
 | | 1,000, ~630 keys | 100,000, 1,000 keys | 100,000, all distinct |
 |---|---:|---:|---:|
-| `unstable_by_key` | 5.8 | 4.5 | 9.6 |
-| `core` `sort_unstable_by_key` | 6.0 | 4.8 | 9.7 |
-| `stable_in`, n / 2 scratch | 10.6 | 22.1 | 22.1 |
-| `stable_in`, 256 scratch | 10.9 | 25.8 | 26.1 |
-| `stable_by_key`, no memory | 49 | 94 | 117 |
-| std `sort_by_key` (allocates) | 7.1 | 4.8 | 11.0 |
+| `unstable_by_key` | 5.8 | 4.5 | 9.8 |
+| `core` `sort_unstable_by_key` | 5.5 | 4.2 | 9.1 |
+| `stable_in`, n scratch | 8.1 | 5.6 | 12.6 |
+| `stable_in`, n / 2 scratch | 8.9 | 7.8 | 13.8 |
+| `stable_in`, 256 scratch | 9.9 | 26.9 | 27.1 |
+| `stable_by_key`, no memory | 48 | 95 | 117 |
+| std `sort_by_key` (allocates n) | 7.4 | 4.8 | 11.1 |
 
-The quicksort is as fast as `core`'s. The stable sort is 1.5x to 4.5x
-slower than std's driftsort, which also detects existing runs and always
-has a buffer. Use `unstable` unless equal elements must keep their order,
-and often a tie-breaker in the key (`(depth, entity_id)`) makes the unstable
-result exactly the stable one.
+The quicksort is as fast as `core`'s. With scratch for every element the
+stable sort is 1.1x to 1.2x slower than std's driftsort (which allocates
+that much); with half, 1.25x to 1.6x. Before 0.47.0 it only merged, and was
+2x to 4.5x slower: a merge step cannot start before the comparison of the
+step before, while a partition's comparisons with the pivot are
+independent. With little scratch most merges are done in place and it
+stays near 27 ns. Use `unstable` unless equal elements must keep their
+order, and often a tie-breaker in the key (`(depth, entity_id)`) makes the
+unstable result exactly the stable one.
 
 ## Selection
 

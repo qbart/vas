@@ -363,6 +363,18 @@ fn sort() {
             v.sort_stable_by_key(|pair| pair.0);
             v.first().map_or(0, |pair| u64::from(pair.0))
         });
+        let mut full = block::<(u32, u32)>(size);
+        bench(
+            &group,
+            "vas::Vector sort_stable_in (n scratch)",
+            size,
+            || {
+                let mut v = Vector::new(&mut memory[..]);
+                let _ = v.extend_from_slice(next());
+                v.sort_stable_in(&mut full, |a, b| a.0.cmp(&b.0));
+                v.first().map_or(0, |pair| u64::from(pair.0))
+            },
+        );
         let mut scratch = block::<(u32, u32)>(size / 2);
         bench(
             &group,

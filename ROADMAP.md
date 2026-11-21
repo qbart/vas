@@ -262,6 +262,12 @@
 - [x] `insert` hashes the key once; the shift moves slots without a branch
 - [x] 20.6 → 19.8 ns against `lru`'s 15.5 (1.28x); with 128-byte values 31.5 → 26.9 ns against 19.7. The remaining gap is measured and recorded in Later
 
+## 0.47.0 — stable quicksort
+
+- [x] `sort::stable_in` sorts pieces as long as the scratch by a stable quicksort (branch-free partition into the scratch, one pass for keys equal to the pivot, merge fallback past 2 log n steps), then merges
+- [x] Sorted, and strictly descending, input takes one pass
+- [x] 100,000 elements, n scratch: 5.6 ns (1,000 keys) and 12.6 ns (distinct) against std's 4.8 and 11.1; was 22
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -275,7 +281,8 @@
 - [x] `LruCache` probes read the entry to compare hashes; keeping hash bits in the table would close most of the 1.3x gap to the `lru` crate (0.46.0: done, but it closed only 4%, 15% with large values; the guess was wrong)
 - [ ] `LruCache` evictions cost 2x the `lru` crate's (25 against 13 ns): four probe runs of unpredictable length, one slot per step. Probing several slots per step (as `Map`'s tags) would make them predictable
 - [ ] `Map` misses in a crowded table: 8 ns against `std`'s 3.3 ns at 76% full (50,000 keys). Linear probing over 8-wide groups clusters; wider groups (SSE2 on x86_64) or probing that jumps between groups would help
-- [ ] Faster stable sort: `sort_stable_in` is 2x to 4.5x slower than std's driftsort at 100,000 elements (detecting existing runs would help)
+- [x] Faster stable sort: `sort_stable_in` was 2x to 4.5x slower than std's driftsort at 100,000 elements (0.47.0: stable quicksort through the scratch, 1.1x to 1.2x with n scratch; the run detection guessed here did not matter for random input)
+- [ ] Stable sort with little scratch (256 elements: 27 ns at 100,000, against 5 to 13 with n / 2): the in-place merges rotate; detecting natural runs and merging by powersort would also help partly sorted input
 
 - [ ] Growable containers
   - [x] `Allocator` trait (`allocate` / `grow` / `free`) implemented by the user (0.25.0)

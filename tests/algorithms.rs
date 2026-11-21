@@ -551,11 +551,12 @@ fn vector_stable_sort_with_scratch_matches_std() {
 #[test]
 fn stable_sort_keeps_every_element_when_compare_panics() {
     let drops = Cell::new(0);
-    let mut scratch = Memory::<Tracked<'_>, 64>::new();
+    let mut scratch = Memory::<Tracked<'_>, 128>::new();
     let mut expected = random(128, 1000, 11);
     expected.sort_unstable();
     let mut panicked = 0;
-    for scratch_len in [0usize, 64] {
+    // No scratch, part of it, and room for every element.
+    for scratch_len in [0usize, 64, 128] {
         // Fail at many points: in the insertion runs and in the merges.
         let step = if cfg!(miri) { 250 } else { 50 };
         for limit in (50..1500).step_by(step) {
@@ -583,5 +584,5 @@ fn stable_sort_keeps_every_element_when_compare_panics() {
             assert_eq!(drops.get(), 128);
         }
     }
-    assert!(panicked > if cfg!(miri) { 6 } else { 30 });
+    assert!(panicked > if cfg!(miri) { 9 } else { 45 });
 }

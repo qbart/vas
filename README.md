@@ -112,7 +112,7 @@ fixed storage the cost is the same without the word.
 | `sort::unstable` (quicksort) | O(n log n) worst case, O(n) sorted, no memory | draw-call order, depth sorting, sorting before `dedup` or binary search; same result on every machine |
 | `sort::select_nth_unstable` (quickselect, median of medians fallback) | O(n) worst case, no memory | medians, k nearest, top k scores, splitting point sets (`KdTree`, `Bvh` use it) |
 | `search::binary_search`, `partition_point` | O(log n), branch-free | lookups in sorted tables, keyframes, cumulative weights for random picks; always the first match |
-| `sort::stable`, `stable_in` (merge sort) | O(n log n) comparisons; moves O(n log² n) without scratch, O(n log n) with n / 2 | ordering by one field while keeping an earlier order: UI lists, sorting by layer after sorting by name |
+| `sort::stable`, `stable_in` (stable quicksort through scratch, merge sort) | O(n log n) comparisons; moves O(n log² n) without scratch, O(n log n) with n / 2; O(n log k) for k distinct keys with n; O(n) when sorted | ordering by one field while keeping an earlier order: UI lists, sorting by layer after sorting by name |
 
 Algorithms on the structures (see [docs/algorithms.md](docs/algorithms.md)):
 

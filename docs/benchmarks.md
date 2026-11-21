@@ -33,7 +33,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Vector::sort_unstable` (vas quicksort) | `core` `sort_unstable` | same speed |
 | `sort::select_nth_unstable` (median, 100k) | `core` `select_nth_unstable` | 1.3x faster |
 | `search::binary_search` (100k) | `core` `binary_search` | 1.3x faster |
-| `Vector::sort_stable_in` | std `sort_by_key` | 1.5x slower at 1k, 2x to 4.5x at 100k; no allocation |
+| `Vector::sort_stable_in`, n scratch | std `sort_by_key` (allocates n) | 1.1x to 1.2x slower (was 2x to 4.5x before 0.47.0) |
+| `Vector::sort_stable_in`, n / 2 scratch | std `sort_by_key` | 1.2x to 1.6x slower |
 | `TreeMap` inserts and removes | `BTreeMap` | level to 1.2x slower |
 | `TreeMap` lookups | `BTreeMap` | 1.6x slower at 1k, 1.5x faster at 16k |
 | `TreeMap` iteration | `BTreeMap` | 3x to 5x slower (2.5 to 4.4 ns per entry) |
@@ -93,7 +94,11 @@ than `BTreeMap`. This is the case the planned red-black tree is for.
 **Sort.** vas's quicksort is level with `core`'s. Its first version was
 1.35x slower: insertion sort in the short slices mispredicts about once per
 element, and a branch-free network with merges from both ends fixed that.
-The sort benchmarks take 8 inputs in turn. Sorting the same input again and
+The stable sort only merged until 0.47.0, 2x to 4.5x slower than std's
+driftsort: each merge step waits for the comparison before it. A stable
+quicksort through the scratch memory (partitions whose comparisons do not
+depend on each other, and one pass for all keys equal to the pivot) brought
+it to 1.1x to 1.2x with scratch for every element. The sort benchmarks take 8 inputs in turn. Sorting the same input again and
 again lets the branch predictor learn its comparisons, which made the
 branchy version look 1.4x faster than `core` at 1k elements when it was
 1.4x slower.
@@ -173,22 +178,25 @@ longer than the 13 ns a contended `done` costs.
 | map 50000 keys: insert then remove | std HashMap + vas FastHasher | 5.4 |
 | sort 1000 (u32, u32) by key | vas::Vector sort_unstable_by_key | 5.8 |
 | sort 1000 (u32, u32) by key | core slice sort_unstable_by_key | 6.0 |
-| sort 1000 (u32, u32) by key | vas::Vector sort_stable_by_key | 48.8 |
-| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 10.6 |
-| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 10.9 |
-| sort 1000 (u32, u32) by key | std sort_by_key (allocates) | 7.1 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_by_key | 48.2 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (n scratch) | 8.1 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 8.9 |
+| sort 1000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 9.9 |
+| sort 1000 (u32, u32) by key | std sort_by_key (allocates) | 7.4 |
 | sort 100000 (u32, u32) by key | vas::Vector sort_unstable_by_key | 4.5 |
 | sort 100000 (u32, u32) by key | core slice sort_unstable_by_key | 4.8 |
-| sort 100000 (u32, u32) by key | vas::Vector sort_stable_by_key | 94.0 |
-| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 22.1 |
-| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 25.8 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_by_key | 94.7 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (n scratch) | 5.6 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (n/2 scratch) | 7.8 |
+| sort 100000 (u32, u32) by key | vas::Vector sort_stable_in (256 scratch) | 26.9 |
 | sort 100000 (u32, u32) by key | std sort_by_key (allocates) | 4.8 |
 | sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_unstable_by_key | 9.6 |
 | sort 100000 (u32, u32) by key, all distinct | core slice sort_unstable_by_key | 9.7 |
 | sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_by_key | 116.6 |
-| sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (n/2 scratch) | 22.1 |
-| sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (256 scratch) | 26.1 |
-| sort 100000 (u32, u32) by key, all distinct | std sort_by_key (allocates) | 11.0 |
+| sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (n scratch) | 12.6 |
+| sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (n/2 scratch) | 13.8 |
+| sort 100000 (u32, u32) by key, all distinct | vas::Vector sort_stable_in (256 scratch) | 27.1 |
+| sort 100000 (u32, u32) by key, all distinct | std sort_by_key (allocates) | 11.1 |
 | binary search 100k sorted u32 | vas::search::binary_search | 11.8 |
 | binary search 100k sorted u32 | core slice binary_search | 15.6 |
 | median of 100k u32 | vas::sort::select_nth_unstable | 0.6 |

@@ -299,3 +299,123 @@ fn sorted_input_is_linear() {
         assert!(v.windows(2).all(|w| w[0] <= w[1]));
     }
 }
+
+/// `stable_in` against `std`'s stable sort, on (key, position) pairs so
+/// that any reordering of equal keys shows.
+fn check_stable_in(input: &[u32], scratch_len: usize, what: &str) {
+    let mut v: Vec<(u32, u32)> = input
+        .iter()
+        .enumerate()
+        .map(|(position, key)| (*key, position as u32))
+        .collect();
+    let mut expected = v.clone();
+    expected.sort_by_key(|pair| pair.0);
+    let mut scratch: Vec<core::mem::MaybeUninit<(u32, u32)>> = (0..scratch_len)
+        .map(|_| core::mem::MaybeUninit::uninit())
+        .collect();
+    sort::stable_in(&mut v, &mut scratch, |a, b| a.0.cmp(&b.0));
+    assert_eq!(v, expected, "{what}, {} with {scratch_len}", input.len());
+}
+
+#[test]
+fn stable_in_matches_std_with_any_scratch() {
+    for &count in sizes() {
+        for (name, input) in patterns(count) {
+            for scratch_len in [0, 16, count / 4, count / 2 + 1, count, count + 5] {
+                check_stable_in(&input, scratch_len, name);
+            }
+        }
+    }
+    // Few distinct keys in many sizes: the partitions of equal keys.
+    let big = if cfg!(miri) { 300 } else { 20_000 };
+    for below in [1, 2, 3, 10, 100] {
+        check_stable_in(&random(big, below, u64::from(below)), big, "few keys");
+    }
+}
+
+#[test]
+fn stable_in_with_full_scratch_keeps_every_element_on_inconsistent_comparisons() {
+    for &count in sizes() {
+        let input = random(count, 1000, 9);
+        let mut expected = input.clone();
+        expected.sort();
+        let mut rng = Rng::new(23);
+        let mut v = input;
+        let mut scratch: Vec<core::mem::MaybeUninit<u32>> = (0..count)
+            .map(|_| core::mem::MaybeUninit::uninit())
+            .collect();
+        sort::stable_in(&mut v, &mut scratch, |_, _| match rng.u32_below(3) {
+            0 => Ordering::Less,
+            1 => Ordering::Equal,
+            _ => Ordering::Greater,
+        });
+        v.sort();
+        assert_eq!(v, expected, "{count}");
+    }
+}
+
+#[test]
+fn stable_in_comparisons_stay_n_log_n() {
+    let count: usize = if cfg!(miri) { 2000 } else { 100_000 };
+    let bound = 3 * count * (count.ilog2() as usize + 1);
+    for (name, input) in patterns(count) {
+        for scratch_len in [count / 2, count] {
+            let mut calls = 0;
+            let mut v = input.clone();
+            let mut scratch: Vec<core::mem::MaybeUninit<u32>> = (0..scratch_len)
+                .map(|_| core::mem::MaybeUninit::uninit())
+                .collect();
+            sort::stable_in(&mut v, &mut scratch, |a, b| {
+                calls += 1;
+                a.cmp(b)
+            });
+            assert!(v.windows(2).all(|w| w[0] <= w[1]), "{name}");
+            assert!(
+                calls <= bound,
+                "{name} with {scratch_len}: {calls} comparisons"
+            );
+        }
+    }
+}
+
+#[test]
+fn stable_in_on_sorted_input_is_linear() {
+    let count = if cfg!(miri) { 1000 } else { 100_000 };
+    for input in [
+        (0..count).collect::<Vec<u32>>(),
+        (0..count).rev().collect(),
+        vec![1; count as usize],
+    ] {
+        for scratch_len in [count as usize / 2, count as usize] {
+            let mut calls = 0;
+            let mut v = input.clone();
+            let mut scratch: Vec<core::mem::MaybeUninit<u32>> = (0..scratch_len)
+                .map(|_| core::mem::MaybeUninit::uninit())
+                .collect();
+            sort::stable_in(&mut v, &mut scratch, |a, b| {
+                calls += 1;
+                a.cmp(b)
+            });
+            assert!(v.windows(2).all(|w| w[0] <= w[1]));
+            assert!(calls < 2 * count as usize, "{scratch_len}: {calls}");
+        }
+    }
+}
+
+#[test]
+fn stable_in_sorts_large_elements_with_full_scratch() {
+    let count = if cfg!(miri) { 300 } else { 5000 };
+    let keys = random(count, 40, 77);
+    let mut v: Vec<([u64; 4], u32)> = keys
+        .iter()
+        .enumerate()
+        .map(|(position, key)| ([u64::from(*key), 1, 2, 3], position as u32))
+        .collect();
+    let mut expected = v.clone();
+    expected.sort_by_key(|item| item.0[0]);
+    let mut scratch: Vec<core::mem::MaybeUninit<([u64; 4], u32)>> = (0..count)
+        .map(|_| core::mem::MaybeUninit::uninit())
+        .collect();
+    sort::stable_in(&mut v, &mut scratch, |a, b| a.0[0].cmp(&b.0[0]));
+    assert_eq!(v, expected);
+}
