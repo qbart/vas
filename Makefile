@@ -33,7 +33,7 @@ miri:
 # ThreadSanitizer on the tests that use threads. Needs nightly with
 # `rust-src`; any report fails the run.
 HOST := $(shell rustc -vV | sed -n 's/host: //p')
-THREADED_TESTS := --test queue --test steal_deque --test arena
+THREADED_TESTS := --test queue --test steal_deque --test job_counter --test arena
 
 tsan:
 	TSAN_OPTIONS=halt_on_error=1 RUSTFLAGS="-Zsanitizer=thread" CARGO_TARGET_DIR=target/tsan \

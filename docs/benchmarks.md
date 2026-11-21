@@ -45,6 +45,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `sync::Queue`, 1 to 8 producers and as many consumers | `Mutex<VecDeque>` | 1.8x to 17x faster |
 | `sync::StealDeque`, owner alone | `Mutex<VecDeque>` | 2x faster |
 | `sync::StealDeque`, owner with 1 to 8 thieves | `Mutex<VecDeque>` | 2.6x to 5x faster |
+| `sync::JobCounter`, 1 to 8 threads finishing jobs | bare `AtomicUsize::fetch_sub` | level |
+| `sync::JobCounter`, 1 to 8 threads finishing jobs | `Mutex<usize>` | 1.6x to 5.5x faster |
 
 ### What the numbers say
 
@@ -100,6 +102,12 @@ closure); a whole-map `FlowField` takes 0.7 ms, a field of view of radius
 **Sparse set.** With 10,000 entities among ids below 100,000, `SparseSet`
 looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 `HashMap`, and walks its values 4x faster, as one packed slice.
+
+**Job counter.** The first `JobCounter::done` was a compare-and-swap loop
+that refused to go below zero: 2x slower than a bare `fetch_sub` with 4 or
+8 threads finishing jobs at once. Now it is a `fetch_sub` that undoes
+itself when it went below zero, level with the bare one. Real jobs take far
+longer than the 13 ns a contended `done` costs.
 
 ### Results
 
@@ -257,6 +265,18 @@ looks a value up in 0.6 ns (an array access, no hash) against 1.4 ns for
 | work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | Mutex<VecDeque> | 274.7 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | vas::sync::StealDeque | 154.5 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | Mutex<VecDeque> | 801.6 |
+| job counter, 1 threads finish jobs | vas::sync::JobCounter | 8.7 |
+| job counter, 1 threads finish jobs | AtomicUsize::fetch_sub | 7.7 |
+| job counter, 1 threads finish jobs | Mutex<usize> | 13.5 |
+| job counter, 2 threads finish jobs | vas::sync::JobCounter | 10.4 |
+| job counter, 2 threads finish jobs | AtomicUsize::fetch_sub | 12.0 |
+| job counter, 2 threads finish jobs | Mutex<usize> | 26.3 |
+| job counter, 4 threads finish jobs | vas::sync::JobCounter | 14.6 |
+| job counter, 4 threads finish jobs | AtomicUsize::fetch_sub | 12.1 |
+| job counter, 4 threads finish jobs | Mutex<usize> | 45.2 |
+| job counter, 8 threads finish jobs | vas::sync::JobCounter | 14.5 |
+| job counter, 8 threads finish jobs | AtomicUsize::fetch_sub | 13.3 |
+| job counter, 8 threads finish jobs | Mutex<usize> | 74.3 |
 
 ## Against other crates
 

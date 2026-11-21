@@ -239,6 +239,12 @@
 - [x] Thieves claim a position before reading it, and slot stamps keep the owner from overwriting a slot still being read: no racy read (the textbook algorithm has one)
 - [x] Level with `crossbeam_deque`; every ordering weakened in turn is caught by Miri
 
+## 0.43.0 — job counters
+
+- [x] `vas::sync::JobCounter`: `add`, `done` (true for the last job), `is_done`, `wait(help)` that never blocks on its own; `const fn new` for `static` counters
+- [x] `done` is one `fetch_sub`, level with a bare one; a `done` too many undoes itself and never makes the counter read done early
+- [x] Results written without atomics are visible after `wait`: weakening either ordering is a data race under Miri
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

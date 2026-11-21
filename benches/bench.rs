@@ -1193,6 +1193,50 @@ fn steal_deque() {
     }
 }
 
+/// `threads` threads each finish `per` jobs at once on one shared counter:
+/// `JobCounter` against a bare `fetch_sub` (no guard against going below
+/// zero) and a `Mutex<usize>`.
+fn job_counter() {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use vas::sync::JobCounter;
+    const JOBS: usize = 1 << 18;
+    for threads in [1, 2, 4, 8] {
+        let per = JOBS / threads;
+        let group = format!("job counter, {threads} threads finish jobs");
+        let finish = |done: &(dyn Fn() -> bool + Sync)| {
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = (0..threads)
+                    .map(|_| scope.spawn(|| (0..per).filter(|_| done()).count() as u64))
+                    .collect();
+                workers.into_iter().map(|w| w.join().unwrap_or(0)).sum()
+            })
+        };
+        let counter = JobCounter::new();
+        bench(&group, "vas::sync::JobCounter", JOBS, || {
+            let _ = counter.add(JOBS);
+            finish(&|| counter.done())
+        });
+        let atomic = AtomicUsize::new(0);
+        bench(&group, "AtomicUsize::fetch_sub", JOBS, || {
+            atomic.store(JOBS, Ordering::Relaxed);
+            finish(&|| atomic.fetch_sub(1, Ordering::AcqRel) == 1)
+        });
+        let locked = Mutex::new(0usize);
+        bench(&group, "Mutex<usize>", JOBS, || {
+            if let Ok(mut pending) = locked.lock() {
+                *pending = JOBS;
+            }
+            finish(&|| {
+                locked.lock().is_ok_and(|mut pending| {
+                    *pending = pending.wrapping_sub(1);
+                    *pending == 0
+                })
+            })
+        });
+    }
+}
+
 fn main() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -1219,4 +1263,5 @@ fn main() {
     lru();
     queue();
     steal_deque();
+    job_counter();
 }
