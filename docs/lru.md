@@ -42,6 +42,12 @@ Keys are looked up through `Borrow`, so a cache keyed by
 - The table maps keys to entries by open addressing with linear probing,
   kept at most 3/4 full. Removing from it shifts the rest of the probe run
   back (no tombstones), so lookups never slow down with use.
+- Each table slot is a `u32`: the entry index in its low bits (as many as
+  the table size needs; indices stay below 3/4 of it, so a slot is never
+  the empty marker), and the low bits of the key's hash above it. A probe
+  reads an entry only when those hash bits match. For tables of up to
+  65,536 slots the hash bits include the entry's home slot, so removing
+  shifts the probe run without reading any entry either.
 - A full cache evicts by writing the new entry over the least recently
   used one, in place. `remove` moves the last entry into the hole.
 
@@ -50,10 +56,20 @@ Keys are looked up through `Borrow`, so a cache keyed by
 ## Speed
 
 A cache of 1,024 entries in front of 2,048 keys, a `get` per key and an
-`insert` on each miss (half of them): 20 ns per key, against 15 ns for the
-`lru` crate (same hasher), which allocates a node per entry and uses
-hashbrown's SIMD table. Each probe here reads the entry to check its hash,
-which is where the difference goes.
+`insert` on each miss (half of them): 19.8 ns per key, against 15.5 ns for
+the `lru` crate (same hasher), which allocates a node per entry and uses
+hashbrown's SIMD table.
+
+Split up, a hit costs 6 ns against 3, and an eviction 25 ns against 13.
+Until 0.46.0 each probe read the entry to compare hashes; keeping hash
+bits in the table instead gained 4% here (20.6 → 19.8 ns), where every
+entry fits in the L1 cache, and 15% with 128-byte values and 16,384
+entries (31.5 → 26.9 ns, `lru` 19.7). What is left is probing: an
+eviction walks four probe runs of unpredictable length (the new key, the
+old key, the shift, the free slot), one slot per step, where hashbrown
+checks 16 slots per SIMD step and almost always stops at the first. Its
+speed also depends on where its nodes landed on the heap: after heavy
+churn the same `lru` case measured 29 ns.
 
 ## Guarantees
 

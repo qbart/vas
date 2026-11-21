@@ -55,8 +55,10 @@ pub struct Entry<K, V> {
 pub struct LruCache<K, V, SE: Storage<Entry<K, V>>, ST: Storage<u32> = SE, H = FastState> {
     // Packed: removing an entry moves the last one into its place.
     entries: Vector<Entry<K, V>, SE>,
-    // Power-of-two length, every slot initialised: an index into
-    // `entries`, or `NONE`.
+    // Power-of-two length, every slot initialised: `NONE`, or an index
+    // into `entries` in the low bits (as many as the table size needs),
+    // with the entry's hash shifted above it (see `packed`). Indices stay
+    // below 3/4 of the table size, so a packed slot is never `NONE`.
     table: Vector<u32, ST>,
     // Most and least recently used, or `NONE` when empty.
     head: u32,
@@ -215,7 +217,38 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
         self.table.len().wrapping_sub(1)
     }
 
+    /// How many low bits of a table slot hold the entry index: log2 of the
+    /// table size.
+    #[inline]
+    fn shift(&self) -> u32 {
+        self.table.len().trailing_zeros()
+    }
+
+    /// The bits of a table slot that hold the entry index. (All of them for
+    /// a table of 2^32 slots or more, which then keeps no hash bits.)
+    #[inline]
+    fn index_bits(&self) -> u32 {
+        self.mask() as u32
+    }
+
+    /// The hash as kept in a table slot: its low bits, shifted above the
+    /// index.
+    #[inline]
+    fn stored(&self, hash: u32) -> u32 {
+        hash.checked_shl(self.shift()).unwrap_or(0)
+    }
+
+    /// A table slot for entry `index` with hash `hash`. A probe compares the
+    /// hash bits with the key's and reads the entry only when they match.
+    /// For tables of up to 2^16 slots the hash bits include the entry's
+    /// home slot, so moving entries needs no entry read either.
+    #[inline]
+    fn packed(&self, index: u32, hash: u32) -> u32 {
+        self.stored(hash) | index
+    }
+
     /// The table slot and entry index of `key`.
+    #[inline]
     fn find<Q>(&self, key: &Q) -> Option<(usize, u32)>
     where
         K: Borrow<Q>,
@@ -224,21 +257,36 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
         if self.entries.is_empty() {
             return None;
         }
-        let hash = self.hash(key);
+        self.find_hashed(key, self.hash(key))
+    }
+
+    /// [`find`](Self::find) for a key whose hash is known.
+    #[inline]
+    fn find_hashed<Q>(&self, key: &Q, hash: u32) -> Option<(usize, u32)>
+    where
+        K: Borrow<Q>,
+        Q: Eq + ?Sized,
+    {
         let mask = self.mask();
+        let index_bits = self.index_bits();
+        let stored = self.stored(hash);
         let mut slot = hash as usize & mask;
         // The table is never full, so an empty slot ends the probe; the
         // bound only guards against a broken invariant.
         for _ in 0..self.table.len() {
-            let index = *self.table.get(slot)?;
-            if index == NONE {
+            let packed = *self.table.get(slot)?;
+            if packed == NONE {
                 return None;
             }
-            if let Some(entry) = self.entries.get(index as usize)
-                && entry.hash == hash
-                && entry.key.borrow() == key
-            {
-                return Some((slot, index));
+            // The upper bits are hash bits: only a match reads the entry.
+            if (packed ^ stored) & !index_bits == 0 {
+                let index = packed & index_bits;
+                if let Some(entry) = self.entries.get(index as usize)
+                    && entry.hash == hash
+                    && entry.key.borrow() == key
+                {
+                    return Some((slot, index));
+                }
             }
             slot = (slot + 1) & mask;
         }
@@ -248,11 +296,12 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
     /// The table slot holding entry `index`, whose hash is `hash`.
     fn slot_of(&self, index: u32, hash: u32) -> Option<usize> {
         let mask = self.mask();
+        let wanted = self.packed(index, hash);
         let mut slot = hash as usize & mask;
         for _ in 0..self.table.len() {
             match *self.table.get(slot)? {
                 NONE => return None,
-                found if found == index => return Some(slot),
+                found if found == wanted => return Some(slot),
                 _ => slot = (slot + 1) & mask,
             }
         }
@@ -264,25 +313,34 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
     fn clear_slot(&mut self, mut hole: usize) {
         let mask = self.mask();
         let mut slot = (hole + 1) & mask;
+        let index_bits = self.index_bits();
+        let shift = self.shift();
+        // The slot keeps the home's bits when the index leaves room for them.
+        let homes_in_table = shift <= 16;
         loop {
-            let Some(&index) = self.table.get(slot) else {
+            let Some(&packed) = self.table.get(slot) else {
                 return;
             };
-            if index == NONE {
+            if packed == NONE {
                 break;
             }
-            let Some(entry) = self.entries.get(index as usize) else {
-                return;
+            let home = if homes_in_table {
+                (packed >> shift) as usize & mask
+            } else {
+                let Some(entry) = self.entries.get((packed & index_bits) as usize) else {
+                    return;
+                };
+                entry.hash as usize & mask
             };
-            let home = entry.hash as usize & mask;
             // Move it into the hole when the hole lies between its home and
-            // where it is now.
-            if (slot.wrapping_sub(home) & mask) >= (slot.wrapping_sub(hole) & mask) {
-                if let Some(target) = self.table.get_mut(hole) {
-                    *target = index;
-                }
-                hole = slot;
+            // where it is now. Without a branch, which would be mispredicted
+            // half the time: an entry that stays is written over itself.
+            let moves = (slot.wrapping_sub(home) & mask) >= (slot.wrapping_sub(hole) & mask);
+            let target = if moves { hole } else { slot };
+            if let Some(target) = self.table.get_mut(target) {
+                *target = packed;
             }
+            hole = if moves { slot } else { hole };
             slot = (slot + 1) & mask;
         }
         if let Some(target) = self.table.get_mut(hole) {
@@ -339,10 +397,11 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
             // its neighbours.
             let moved = self.entries.get(last as usize)?;
             let (hash, prev, next) = (moved.hash, moved.prev, moved.next);
+            let repointed = self.packed(index, hash);
             if let Some(slot) = self.slot_of(last, hash)
                 && let Some(target) = self.table.get_mut(slot)
             {
-                *target = index;
+                *target = repointed;
             }
             match self.entries.get_mut(prev as usize) {
                 Some(before) => before.next = index,
@@ -410,7 +469,8 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
     /// cached, else the least recently used entry when the cache was full,
     /// else `None`. A cache of capacity 0 returns the new entry itself.
     pub fn insert(&mut self, key: K, value: V) -> Option<(K, V)> {
-        if let Some((_, index)) = self.find(&key) {
+        let hash = self.hash(&key);
+        if let Some((_, index)) = self.find_hashed(&key, hash) {
             self.touch(index);
             let entry = self.entries.get_mut(index as usize)?;
             let old_key = core::mem::replace(&mut entry.key, key);
@@ -420,7 +480,6 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
         if self.capacity == 0 {
             return Some((key, value));
         }
-        let hash = self.hash(&key);
         if self.entries.len() >= self.capacity {
             return self.replace_lru(key, value, hash);
         }
@@ -446,10 +505,11 @@ impl<K: Hash + Eq, V, SE: Storage<Entry<K, V>>, ST: Storage<u32>, H: BuildHasher
     /// its probe run.
     fn place(&mut self, index: u32, hash: u32) {
         let mask = self.mask();
+        let packed = self.packed(index, hash);
         let mut slot = hash as usize & mask;
         while let Some(target) = self.table.get_mut(slot) {
             if *target == NONE {
-                *target = index;
+                *target = packed;
                 return;
             }
             slot = (slot + 1) & mask;

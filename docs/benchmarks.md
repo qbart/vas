@@ -260,7 +260,7 @@ longer than the 13 ns a contended `done` costs.
 | components 10k of 100k ids: iterate | vas::SparseSet | 0.1 |
 | components 10k of 100k ids: iterate | vas::Map (50% full) | 0.7 |
 | components 10k of 100k ids: iterate | std HashMap + vas FastHasher | 0.4 |
-| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
+| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 19.8 |
 | queue, one thread: push then pop | vas::sync::Queue | 7.8 |
 | queue, one thread: push then pop | Mutex<VecDeque> | 16.2 |
 | queue, 1 producers + 1 consumers, 1024 slots | vas::sync::Queue | 19.0 |
@@ -326,7 +326,7 @@ algorithms, so theirs differ).
 | `KdTree` nearest | `rstar::RTree` | about 3x faster, and 2.5x faster to build |
 | `SpatialGrid` radius query | `rstar::RTree` | about 4.5x faster |
 | `PathFinder` | `pathfinding::astar` | about 1.2x faster |
-| `LruCache` | `lru::LruCache` with the same hasher | 1.3x slower (20 against 15 ns per get or insert); no allocation |
+| `LruCache` | `lru::LruCache` with the same hasher | 1.28x slower (19.8 against 15.5 ns per get or insert; 1.37x with 128-byte values); no allocation |
 | `sync::Queue` | `crossbeam_queue::ArrayQueue` | level on one thread; 1.1x to 5x faster with 1 to 8 producers and as many consumers |
 | `sync::StealDeque` | `crossbeam_deque` (LIFO worker) | level: the same 8.2 ns alone, within noise with 1 to 8 thieves |
 | `sync::Ring` | `rtrb`, `heapless::spsc`, `crossbeam` `ArrayQueue` | fastest: 1.3x faster than `rtrb` on one thread and level to 1.5x faster across two; 2x to 4x faster than `heapless`; 7x faster than `ArrayQueue` |
@@ -413,8 +413,8 @@ Notes:
 | 10k points: 1k nearest | rstar::RTree | 442.2 |
 | A* 128x128 grid, corner to corner | vas::PathFinder | 34996.0 |
 | A* 128x128 grid, corner to corner | pathfinding::astar | 41999.0 |
-| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 20.3 |
-| lru 1024 of 2048 keys: get, insert on a miss | lru::LruCache + vas FastHasher | 15.3 |
+| lru 1024 of 2048 keys: get, insert on a miss | vas::LruCache | 19.8 |
+| lru 1024 of 2048 keys: get, insert on a miss | lru::LruCache + vas FastHasher | 15.5 |
 | queue, one thread: push then pop | vas::sync::Queue | 7.8 |
 | queue, one thread: push then pop | crossbeam ArrayQueue | 7.7 |
 | queue, 1 producers + 1 consumers, 1024 slots | vas::sync::Queue | 19.1 |

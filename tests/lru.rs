@@ -240,3 +240,114 @@ fn colliding_hashes_stay_findable() -> Test {
     }
     Ok(())
 }
+
+/// A hasher that hashes `u32` keys to `key << SHIFT`: with a large shift
+/// every key has the same table slot and only the upper bits differ; with
+/// none, keys spread over the slots and the upper bits are all zero.
+#[derive(Default)]
+struct Shifted<const SHIFT: u32>(u64);
+
+impl<const SHIFT: u32> core::hash::Hasher for Shifted<SHIFT> {
+    fn finish(&self) -> u64 {
+        self.0 << SHIFT
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes.iter().rev() {
+            self.0 = (self.0 << 8) | u64::from(*byte);
+        }
+    }
+    fn write_u32(&mut self, value: u32) {
+        self.0 = u64::from(value);
+    }
+}
+
+/// Inserts, gets and removes against a model, with a table larger than
+/// needed, and checks every cached key is found.
+fn churn<H: core::hash::BuildHasher>(hasher: H) -> Test {
+    let mut entries = Memory::<Entry<u32, u32>, 20>::new();
+    let mut table = Memory::<u32, 64>::new();
+    let mut cache = LruCache::with_hasher(&mut entries, &mut table, 20, hasher)?;
+    let mut rng = Rng::new(21);
+    let mut model: VecDeque<(u32, u32)> = VecDeque::new();
+    let steps = if cfg!(miri) { 300 } else { 20_000 };
+    for step in 0..steps {
+        let key = rng.u32_below(50);
+        let at = model.iter().position(|(k, _)| *k == key);
+        match rng.u32_below(3) {
+            0 => {
+                let out = cache.insert(key, step);
+                let expected = match at {
+                    Some(i) => model.remove(i),
+                    None if model.len() == 20 => model.pop_back(),
+                    None => None,
+                };
+                model.push_front((key, step));
+                assert_eq!(out, expected);
+            }
+            1 => {
+                let got = cache.get(&key).copied();
+                if let Some(i) = at {
+                    let entry = model.remove(i).ok_or("in model")?;
+                    model.push_front(entry);
+                    assert_eq!(got, Some(entry.1));
+                } else {
+                    assert_eq!(got, None);
+                }
+            }
+            _ => {
+                assert_eq!(
+                    cache.remove(&key),
+                    at.and_then(|i| model.remove(i)).map(|(_, v)| v)
+                );
+            }
+        }
+        for (key, value) in &model {
+            assert_eq!(cache.peek(key), Some(value), "step {step}");
+        }
+        if step % 97 == 0 && cache.pop_lru() != model.pop_back() {
+            return Err("pop_lru".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn keys_alike_in_the_low_or_high_hash_bits_stay_apart() -> Test {
+    use core::hash::BuildHasherDefault;
+    // Same slot for every key, different upper bits.
+    churn(BuildHasherDefault::<Shifted<16>>::default())?;
+    // Different slots, upper bits all zero.
+    churn(BuildHasherDefault::<Shifted<0>>::default())?;
+    // Upper bits that differ only above the slot bits of a 64-slot table.
+    churn(BuildHasherDefault::<Shifted<6>>::default())
+}
+
+#[test]
+fn a_table_too_large_to_keep_home_bits_still_works() -> Test {
+    use core::mem::MaybeUninit;
+    // 131,072 table slots: the index takes 17 bits, too many to keep the
+    // home slot's bits beside it, so removal reads the entries instead.
+    let capacity = 49_153;
+    let mut entries: Vec<MaybeUninit<Entry<u32, u32>>> =
+        (0..capacity).map(|_| MaybeUninit::uninit()).collect();
+    let mut table: Vec<MaybeUninit<u32>> = (0..1 << 17).map(|_| MaybeUninit::uninit()).collect();
+    let mut cache = LruCache::new(&mut entries[..], &mut table[..], capacity)?;
+    let count = if cfg!(miri) { 600 } else { 60_000u32 };
+    let mut rng = Rng::new(5);
+    let mut model = std::collections::HashMap::new();
+    for key in 0..count {
+        let key = key.wrapping_mul(2_654_435_761) ^ rng.u32_below(4);
+        if let Some((old, _)) = cache.insert(key, key / 2) {
+            model.remove(&old);
+        }
+        model.insert(key, key / 2);
+        if key.is_multiple_of(7) {
+            assert_eq!(cache.remove(&key), model.remove(&key));
+        }
+    }
+    assert_eq!(cache.len(), model.len());
+    for (key, value) in &model {
+        assert_eq!(cache.peek(key), Some(value));
+    }
+    Ok(())
+}

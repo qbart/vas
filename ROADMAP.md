@@ -256,6 +256,12 @@
 - [x] Growing `Map` doubles past 7/8 full, as `std::HashMap`: filling 50,000 keys 16 ns → 11 ns per key (`std` 10), half the memory at that size
 - [x] Trade-off measured and documented: misses in a growing map at 76% full cost 8 ns (2 ns before)
 
+## 0.46.0 — hash bits in the LRU table
+
+- [x] `LruCache` table slots keep the low bits of the key's hash above the entry index: probes skip entries whose bits differ, and for tables up to 65,536 slots removal shifts runs without reading entries
+- [x] `insert` hashes the key once; the shift moves slots without a branch
+- [x] 20.6 → 19.8 ns against `lru`'s 15.5 (1.28x); with 128-byte values 31.5 → 26.9 ns against 19.7. The remaining gap is measured and recorded in Later
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -266,7 +272,8 @@
 
 ## Later
 
-- [ ] `LruCache` probes read the entry to compare hashes; keeping hash bits in the table would close most of the 1.3x gap to the `lru` crate
+- [x] `LruCache` probes read the entry to compare hashes; keeping hash bits in the table would close most of the 1.3x gap to the `lru` crate (0.46.0: done, but it closed only 4%, 15% with large values; the guess was wrong)
+- [ ] `LruCache` evictions cost 2x the `lru` crate's (25 against 13 ns): four probe runs of unpredictable length, one slot per step. Probing several slots per step (as `Map`'s tags) would make them predictable
 - [ ] `Map` misses in a crowded table: 8 ns against `std`'s 3.3 ns at 76% full (50,000 keys). Linear probing over 8-wide groups clusters; wider groups (SSE2 on x86_64) or probing that jumps between groups would help
 - [ ] Faster stable sort: `sort_stable_in` is 2x to 4.5x slower than std's driftsort at 100,000 elements (detecting existing runs would help)
 
