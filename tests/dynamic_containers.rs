@@ -116,6 +116,27 @@ fn map_grows_and_keeps_every_entry() {
 }
 
 #[test]
+fn map_grows_only_past_seven_eighths_full() {
+    let mut block = Memory::<u8, 65536>::new();
+    let arena = Arena::new(&mut block);
+    let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
+    let mut key = 0u32;
+    // Doubling from 4 slots: 8, 16, ... 1024. Each holds 7/8 before growing.
+    while map.len() < 896 {
+        assert_eq!(map.insert(key, key), Ok(None));
+        key += 1;
+        assert!(map.len() * 8 <= map.capacity() * 7 || map.capacity() <= 4);
+    }
+    assert_eq!(map.capacity(), 1024);
+    assert_eq!(map.insert(key, key), Ok(None));
+    assert_eq!(map.capacity(), 2048);
+    // `reserve` sizes for 7/8 too.
+    let mut sized = Map::<u32, u32, Dynamic<&Arena>>::new(Dynamic(&arena), Dynamic(&arena));
+    assert_eq!(sized.reserve(896), Ok(()));
+    assert!(sized.capacity() >= 1024 && sized.capacity() < 1100);
+}
+
+#[test]
 fn map_reports_full_when_the_allocator_refuses() {
     let mut block = Memory::<u8, 512>::new();
     let arena = Arena::new(&mut block);

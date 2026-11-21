@@ -104,9 +104,9 @@ the tag, so a hasher should mix its input into both halves.
 
 ## Growing
 
-With `Map<K, V, Dynamic<A>>` the map moves to bigger storage when it gets
-more than 3/4 full, so lookups stay fast without sizing it by hand. Pass
-the allocator twice, once per block:
+With `Map<K, V, Dynamic<A>>` the map moves to bigger storage, twice the
+size, when it gets more than 7/8 full, as `std`'s `HashMap` does. Pass the
+allocator twice, once per block:
 
 ```rust
 let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
@@ -114,7 +114,13 @@ let mut map = Map::new(Dynamic(&arena), Dynamic(&arena));
 
 - Every key is hashed again when the map moves.
 - `reserve(additional) -> Result<(), Full<()>>` makes room up front, at no
-  more than 3/4 full.
+  more than 7/8 full.
+- A growing map is between 7/16 and 7/8 full. Near 7/8 a lookup of a key
+  that is **not** in the map costs up to 7x as much as in a half-full map
+  (2 ns against up to 15 ns at 229,000 keys; `std` pays the same, 1.4x
+  less). When misses are common, `reserve` twice the entries expected.
+  Until 0.45.0 the map grew at 3/4 full: misses stayed near 2 ns, but
+  filling took up to 2x as long and up to 2x the memory.
 - `insert` reports `Full` only when the allocator refuses *and* every slot
   is taken: a map that cannot grow any more fills up completely, like a
   fixed one.

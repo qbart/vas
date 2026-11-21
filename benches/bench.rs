@@ -231,6 +231,26 @@ fn map<const N: usize>() {
     lookups("vas::Map (50% full)", 2 * N);
     lookups("vas::Map (75% full)", N * 4 / 3);
     lookups("vas::Map (90% full)", N * 10 / 9);
+    #[cfg(feature = "alloc")]
+    {
+        let mut map = Map::<u32, u32, vas::Dynamic>::default();
+        for key in &input {
+            let _ = map.insert(*key, *key);
+        }
+        let name = format!(
+            "vas::Map (growing, {}% full)",
+            map.len() * 100 / map.capacity().max(1)
+        );
+        bench(&format!("map {N} keys: hits"), &name, N, || {
+            input
+                .iter()
+                .filter_map(|key| map.get(key))
+                .fold(0u64, |sum, v| sum.wrapping_add(*v as u64))
+        });
+        bench(&format!("map {N} keys: misses"), &name, N, || {
+            misses.iter().filter(|key| map.contains_key(*key)).count() as u64
+        });
+    }
 
     fn std_lookups<S: BuildHasher>(
         name: &str,

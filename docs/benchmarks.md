@@ -26,6 +26,7 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `Pool` | `Vec<Option<Box<T>>>` | about 9x faster (no allocation per value) |
 | `Map`, 2k keys | `HashMap` with the same hasher | inserts level, lookups 1.4x to 1.9x slower (under 1 ns) |
 | `Map`, 50k keys | `HashMap` with the same hasher | inserts level, hits 1.5x slower, misses 1.5x faster |
+| `Map`, growing to 50k keys | `HashMap` growing, same hasher | fills 1.1x slower (was 2x before 0.45.0); at the same fullness (76%) hits 1.4x and misses 2.4x slower |
 | `Map` | `HashMap` with its default hasher | about 2x faster at everything |
 | `OrderedMap` lookups | `BTreeMap` | slightly slower when small, 3x faster at 16k |
 | `OrderedMap` inserts | `BTreeMap` | slower, and it gets worse with size (4x at 16k) |
@@ -62,6 +63,15 @@ the table.
 Fill level matters for keys that are **not** in the map: at 75% full a miss
 costs up to 3x as much as at 50% (50k keys), at 90% up to 8x. Hits barely
 change up to 90%. Leave a quarter of the slots free if misses are common.
+
+A growing `Map` doubles when it passes 7/8 full, as `std` does. Until
+0.45.0 it grew at 3/4: at 50k keys that meant one more doubling than
+`std` (131,072 slots against 65,536), twice the memory, and twice the
+time to fill (16 ns against 8 ns per key). Growing at 7/8 brings it level
+with `std`, but leaves the map fuller: at 50k keys it is 76% full, where a
+miss costs 8 ns against 2 ns before. `std` at the same fullness misses in
+3.3 ns: its 16-wide SIMD groups and jumps between groups suffer less from
+crowding than vas's 8-wide linear scan.
 
 Until 0.26 the map kept a 4-byte tag next to every key and value and
 walked slot by slot. At 50k keys that layout took 4.8 ns per insert, 4.7
@@ -124,8 +134,8 @@ longer than the 13 ns a contended `done` costs.
 | heap 50k push then pop | vas::Heap | 17.8 |
 | heap 50k push then pop | std BinaryHeap | 18.0 |
 | map 2000 keys: insert | vas::Map (50% full) | 2.5 |
-| map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 8.1 |
-| map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.0 |
+| map 2000 keys: insert | vas::Map (growing, `Dynamic`) | 9.3 |
+| map 2000 keys: insert | std HashMap + vas FastHasher (growing) | 10.1 |
 | map 2000 keys: insert | std HashMap (SipHash) | 5.5 |
 | map 2000 keys: insert | std HashMap + vas FastHasher | 2.6 |
 | map 2000 keys: hits | vas::Map (50% full) | 1.9 |
@@ -134,6 +144,8 @@ longer than the 13 ns a contended `done` costs.
 | map 2000 keys: misses | vas::Map (75% full) | 2.3 |
 | map 2000 keys: hits | vas::Map (90% full) | 2.3 |
 | map 2000 keys: misses | vas::Map (90% full) | 4.9 |
+| map 2000 keys: hits | vas::Map (growing, 48% full) | 1.9 |
+| map 2000 keys: misses | vas::Map (growing, 48% full) | 1.9 |
 | map 2000 keys: hits | std HashMap (SipHash) | 3.8 |
 | map 2000 keys: misses | std HashMap (SipHash) | 3.6 |
 | map 2000 keys: hits | std HashMap + vas FastHasher | 1.4 |
@@ -141,8 +153,8 @@ longer than the 13 ns a contended `done` costs.
 | map 2000 keys: insert then remove | vas::Map (50% full) | 3.6 |
 | map 2000 keys: insert then remove | std HashMap + vas FastHasher | 2.8 |
 | map 50000 keys: insert | vas::Map (50% full) | 2.9 |
-| map 50000 keys: insert | vas::Map (growing, `Dynamic`) | 16.3 |
-| map 50000 keys: insert | std HashMap + vas FastHasher (growing) | 8.1 |
+| map 50000 keys: insert | vas::Map (growing, `Dynamic`) | 11.3 |
+| map 50000 keys: insert | std HashMap + vas FastHasher (growing) | 10.1 |
 | map 50000 keys: insert | std HashMap (SipHash) | 6.2 |
 | map 50000 keys: insert | std HashMap + vas FastHasher | 3.0 |
 | map 50000 keys: hits | vas::Map (50% full) | 2.5 |
@@ -151,6 +163,8 @@ longer than the 13 ns a contended `done` costs.
 | map 50000 keys: misses | vas::Map (75% full) | 6.9 |
 | map 50000 keys: hits | vas::Map (90% full) | 3.5 |
 | map 50000 keys: misses | vas::Map (90% full) | 17.6 |
+| map 50000 keys: hits | vas::Map (growing, 76% full) | 2.4 |
+| map 50000 keys: misses | vas::Map (growing, 76% full) | 8.0 |
 | map 50000 keys: hits | std HashMap (SipHash) | 4.9 |
 | map 50000 keys: misses | std HashMap (SipHash) | 5.5 |
 | map 50000 keys: hits | std HashMap + vas FastHasher | 1.7 |

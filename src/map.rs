@@ -34,10 +34,10 @@ pub struct Slot<K, V> {
 }
 
 /// Number of entries up to which a growable map of `capacity` slots is not
-/// yet crowded: 3/4 of the slots.
+/// yet crowded: 7/8 of the slots, as `std`'s `HashMap`.
 #[inline]
 const fn roomy(capacity: usize) -> usize {
-    capacity - capacity / 4
+    capacity - capacity / 8
 }
 
 /// The slot an entry with this hash would ideally live in.
@@ -155,7 +155,8 @@ fn first_empty(tags: &[u8], home: usize) -> Option<usize> {
 /// the tags eight at a time and only looks at a key when its tag matches,
 /// so finding a key stays fast when the map is nearly full. Looking up
 /// keys that are **not** in the map slows down past 3/4 full; leave a
-/// quarter of the slots free when that is common.
+/// quarter of the slots free (or [`reserve`](Self::reserve) room) when
+/// that is common.
 ///
 /// ```
 /// use vas::map::Slot;
@@ -317,7 +318,7 @@ impl<K, V, S: Storage<Slot<K, V>> + Storage<u8>, H> Map<K, V, S, H> {
 
     /// Number of slots: the maximum number of entries for borrowed and
     /// inline storage. With dynamic storage the map grows before it is
-    /// this full (at 3/4).
+    /// this full (at 7/8).
     #[inline]
     pub const fn capacity(&self) -> usize {
         self.used
@@ -399,11 +400,11 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
     }
 
     /// Moves the map to bigger storage, sized so that `entries` entries
-    /// leave it at most 3/4 full. Returns `false`, with nothing changed,
+    /// leave it at most 7/8 full. Returns `false`, with nothing changed,
     /// when the storage cannot grow.
     #[cold]
     fn grow(&mut self, entries: usize) -> bool {
-        let Some(min) = entries.checked_add(entries / 3 + 1) else {
+        let Some(min) = entries.checked_add(entries / 7 + 1) else {
             return false;
         };
         let old_used = self.used;
@@ -447,7 +448,7 @@ impl<K: Hash + Eq, V, S: Storage<Slot<K, V>> + Storage<u8>, H: BuildHasher> Map<
     /// is replaced, the existing key is kept), `Ok(None)` when it is new, and
     /// hands both back in [`Full`] when the key is new and there is no room.
     ///
-    /// With dynamic storage the map grows when it gets more than 3/4 full,
+    /// With dynamic storage the map grows when it gets more than 7/8 full,
     /// so there is no room only when the allocator refuses and every slot
     /// is taken.
     #[inline]

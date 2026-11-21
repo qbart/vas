@@ -251,6 +251,11 @@
 - [x] Fastest of the four compared: 1.0 ns on one thread (`rtrb` 1.3, `heapless` 2.2), 2.5 ns between two threads
 - [x] Every ordering weakened in turn is a data race under Miri
 
+## 0.45.0 — map grows at 7/8
+
+- [x] Growing `Map` doubles past 7/8 full, as `std::HashMap`: filling 50,000 keys 16 ns → 11 ns per key (`std` 10), half the memory at that size
+- [x] Trade-off measured and documented: misses in a growing map at 76% full cost 8 ns (2 ns before)
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)
@@ -262,6 +267,7 @@
 ## Later
 
 - [ ] `LruCache` probes read the entry to compare hashes; keeping hash bits in the table would close most of the 1.3x gap to the `lru` crate
+- [ ] `Map` misses in a crowded table: 8 ns against `std`'s 3.3 ns at 76% full (50,000 keys). Linear probing over 8-wide groups clusters; wider groups (SSE2 on x86_64) or probing that jumps between groups would help
 - [ ] Faster stable sort: `sort_stable_in` is 2x to 4.5x slower than std's driftsort at 100,000 elements (detecting existing runs would help)
 
 - [ ] Growable containers
@@ -278,6 +284,5 @@
         `Deque`, `Heap`, `OrderedMap`, `Bitset`, `Tree`, `BinaryTree`
   - [x] Growing on the two-buffer containers (0.26.0): `Graph`,
         `StaticGraph`, `SpatialGrid`, `Quadtree`/`Octree`, `PathFinder`
-  - [ ] Growing `Map` is 2x slower to fill than `std::HashMap` at 50,000
-        keys (faster at 2,000): it grows at 3/4 full, std at 7/8, so it
-        ends up with twice the slots at that size
+  - [x] Growing `Map` was 2x slower to fill than `std::HashMap` at 50,000
+        keys: it grew at 3/4 full, std at 7/8 (0.45.0: now 7/8, 1.1x)
