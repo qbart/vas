@@ -45,6 +45,8 @@ Treat the numbers as a rough guide, not a precise measurement:
 | `sync::Queue`, 1 to 8 producers and as many consumers | `Mutex<VecDeque>` | 1.8x to 17x faster |
 | `sync::StealDeque`, owner alone | `Mutex<VecDeque>` | 2x faster |
 | `sync::StealDeque`, owner with 1 to 8 thieves | `Mutex<VecDeque>` | 2.6x to 5x faster |
+| `sync::Ring`, one thread | `Mutex<VecDeque>` | 16x faster (8x faster than `sync::Queue`) |
+| `sync::Ring`, one producer thread and one consumer thread | `Mutex<VecDeque>` | 15x faster (3x faster than `sync::Queue`) |
 | `sync::JobCounter`, 1 to 8 threads finishing jobs | bare `AtomicUsize::fetch_sub` | level |
 | `sync::JobCounter`, 1 to 8 threads finishing jobs | `Mutex<usize>` | 1.6x to 5.5x faster |
 
@@ -265,6 +267,12 @@ longer than the 13 ns a contended `done` costs.
 | work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | Mutex<VecDeque> | 274.7 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | vas::sync::StealDeque | 154.5 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | Mutex<VecDeque> | 801.6 |
+| ring, one thread: push then pop | vas::sync::Ring | 1.0 |
+| ring, one thread: push then pop | vas::sync::Queue | 7.8 |
+| ring, one thread: push then pop | Mutex<VecDeque> | 16.1 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | vas::sync::Ring | 4.2 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | vas::sync::Queue | 11.7 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | Mutex<VecDeque> | 64.2 |
 | job counter, 1 threads finish jobs | vas::sync::JobCounter | 8.7 |
 | job counter, 1 threads finish jobs | AtomicUsize::fetch_sub | 7.7 |
 | job counter, 1 threads finish jobs | Mutex<usize> | 13.5 |
@@ -307,6 +315,7 @@ algorithms, so theirs differ).
 | `LruCache` | `lru::LruCache` with the same hasher | 1.3x slower (20 against 15 ns per get or insert); no allocation |
 | `sync::Queue` | `crossbeam_queue::ArrayQueue` | level on one thread; 1.1x to 5x faster with 1 to 8 producers and as many consumers |
 | `sync::StealDeque` | `crossbeam_deque` (LIFO worker) | level: the same 8.2 ns alone, within noise with 1 to 8 thieves |
+| `sync::Ring` | `rtrb`, `heapless::spsc`, `crossbeam` `ArrayQueue` | fastest: 1.3x faster than `rtrb` on one thread and level to 1.5x faster across two; 2x to 4x faster than `heapless`; 7x faster than `ArrayQueue` |
 
 Notes:
 
@@ -333,6 +342,9 @@ Notes:
   pushing to it at 1024 values, the capacity of vas's deque. In the cases
   with thieves the owner pushes everything, popping one itself whenever
   the deque is full; nanoseconds are per value, for the whole run.
+- `heapless::spsc::Queue<T, 1024>` holds 1023 values; the others hold 1024.
+  Across two threads, `rtrb` measured 2.6 to 3.7 ns between runs, vas's
+  ring 2.5 to 2.6.
 
 ### Results
 
@@ -409,3 +421,11 @@ Notes:
 | work-stealing deque, owner pushes, 4 thieves steal, 1024 slots | crossbeam_deque | 103.7 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | vas::sync::StealDeque | 159.5 |
 | work-stealing deque, owner pushes, 8 thieves steal, 1024 slots | crossbeam_deque | 155.2 |
+| ring, one thread: push then pop | vas::sync::Ring | 1.0 |
+| ring, one thread: push then pop | rtrb | 1.3 |
+| ring, one thread: push then pop | heapless spsc | 2.2 |
+| ring, one thread: push then pop | crossbeam ArrayQueue | 7.7 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | vas::sync::Ring | 2.6 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | rtrb | 2.6 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | heapless spsc | 10.0 |
+| ring, 1 producer thread + 1 consumer thread, 1024 slots | crossbeam ArrayQueue | 17.8 |

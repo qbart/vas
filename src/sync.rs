@@ -5,6 +5,8 @@
 //! - [`StealDeque`]: a work-stealing deque; its owner pushes and pops at
 //!   one end through a [`Worker`], other threads steal from the other end
 //!   through a [`Stealer`].
+//! - [`Ring`]: a ring buffer between one pushing and one popping thread,
+//!   through a [`Producer`] and a [`Consumer`].
 //! - [`JobCounter`]: counts the unfinished jobs of a group, so a thread can
 //!   wait for them.
 //! - [`CachePadded`]: keeps a value on a cache line of its own.
@@ -24,6 +26,8 @@ mod padded;
 #[cfg(target_has_atomic = "ptr")]
 mod queue;
 #[cfg(target_has_atomic = "ptr")]
+mod ring;
+#[cfg(target_has_atomic = "ptr")]
 mod steal_deque;
 
 #[cfg(target_has_atomic = "ptr")]
@@ -31,6 +35,8 @@ pub use job_counter::JobCounter;
 pub use padded::CachePadded;
 #[cfg(target_has_atomic = "ptr")]
 pub use queue::Queue;
+#[cfg(target_has_atomic = "ptr")]
+pub use ring::{Consumer, Producer, Ring};
 #[cfg(target_has_atomic = "ptr")]
 pub use steal_deque::{Steal, StealDeque, Stealer, Worker};
 

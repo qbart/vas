@@ -1193,6 +1193,101 @@ fn steal_deque() {
     }
 }
 
+/// One thread pushes `0..total` (spinning while full), another pops them
+/// all. Returns the sum of the values popped.
+fn stream(
+    total: u64,
+    mut push: impl FnMut(u64) -> bool + Send,
+    mut pop: impl FnMut() -> Option<u64> + Send,
+) -> u64 {
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            for value in 0..total {
+                while !push(value) {
+                    std::hint::spin_loop();
+                }
+            }
+        });
+        let reader = scope.spawn(move || {
+            let mut sum = 0u64;
+            let mut seen = 0;
+            while seen < total {
+                match pop() {
+                    Some(value) => {
+                        sum = sum.wrapping_add(value);
+                        seen += 1;
+                    }
+                    None => std::hint::spin_loop(),
+                }
+            }
+            sum
+        });
+        reader.join().unwrap_or(0)
+    })
+}
+
+/// The single-producer, single-consumer ring against the MPMC `Queue` and
+/// a `Mutex<VecDeque>`, all with 1024 slots.
+fn ring() {
+    use std::sync::Mutex;
+    use vas::sync::{Queue, Ring, Slot};
+    const CAPACITY: usize = 1024;
+    const N: usize = 1 << 20;
+    let mut ring_slots = block::<u64>(CAPACITY);
+    let mut ring = Ring::new(&mut ring_slots[..]);
+    let (mut producer, mut consumer) = ring.split();
+    let mut queue_slots = block::<Slot<u64>>(CAPACITY);
+    let queue = Queue::new(&mut queue_slots[..]);
+    let locked = Mutex::new(VecDeque::with_capacity(CAPACITY));
+    let locked_push = |value: u64| {
+        locked.lock().is_ok_and(|mut q| {
+            q.len() < CAPACITY && {
+                q.push_back(value);
+                true
+            }
+        })
+    };
+    let locked_pop = || locked.lock().ok().and_then(|mut q| q.pop_front());
+
+    let group = "ring, one thread: push then pop";
+    bench(group, "vas::sync::Ring", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = producer.push(i);
+                consumer.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "vas::sync::Queue", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = queue.push(i);
+                queue.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "Mutex<VecDeque>", N, || {
+        (0..N as u64)
+            .map(|i| {
+                locked_push(i);
+                locked_pop().unwrap_or(0)
+            })
+            .sum()
+    });
+
+    let group = "ring, 1 producer thread + 1 consumer thread, 1024 slots";
+    bench(group, "vas::sync::Ring", N, || {
+        let (p, c) = (&mut producer, &mut consumer);
+        stream(N as u64, move |v| p.push(v).is_ok(), move || c.pop())
+    });
+    bench(group, "vas::sync::Queue", N, || {
+        stream(N as u64, |v| queue.push(v).is_ok(), || queue.pop())
+    });
+    bench(group, "Mutex<VecDeque>", N, || {
+        stream(N as u64, locked_push, locked_pop)
+    });
+}
+
 /// `threads` threads each finish `per` jobs at once on one shared counter:
 /// `JobCounter` against a bare `fetch_sub` (no guard against going below
 /// zero) and a `Mutex<usize>`.
@@ -1263,5 +1358,6 @@ fn main() {
     lru();
     queue();
     steal_deque();
+    ring();
     job_counter();
 }

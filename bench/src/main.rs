@@ -724,6 +724,106 @@ fn steal_deque() {
     }
 }
 
+/// One thread pushes `0..total` (spinning while full), another pops them
+/// all. Returns the sum of the values popped.
+fn stream(
+    total: u64,
+    mut push: impl FnMut(u64) -> bool + Send,
+    mut pop: impl FnMut() -> Option<u64> + Send,
+) -> u64 {
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            for value in 0..total {
+                while !push(value) {
+                    std::hint::spin_loop();
+                }
+            }
+        });
+        let reader = scope.spawn(move || {
+            let mut sum = 0u64;
+            let mut seen = 0;
+            while seen < total {
+                match pop() {
+                    Some(value) => {
+                        sum = sum.wrapping_add(value);
+                        seen += 1;
+                    }
+                    None => std::hint::spin_loop(),
+                }
+            }
+            sum
+        });
+        reader.join().unwrap_or(0)
+    })
+}
+
+/// The single-producer, single-consumer ring against `rtrb`,
+/// `heapless::spsc` (1023 of its 1024 slots usable) and `crossbeam`'s
+/// `ArrayQueue`, all with 1024 slots.
+fn ring() {
+    use vas::sync::Ring;
+    const CAPACITY: usize = 1024;
+    const N: usize = 1 << 20;
+    let mut slots = block::<u64>(CAPACITY);
+    let mut ring = Ring::new(&mut slots[..]);
+    let (mut producer, mut consumer) = ring.split();
+    let (mut rt_producer, mut rt_consumer) = rtrb::RingBuffer::<u64>::new(CAPACITY);
+    let mut heapless_queue = Box::new(heapless::spsc::Queue::<u64, CAPACITY>::new());
+    let (mut hl_producer, mut hl_consumer) = heapless_queue.split();
+    let array = crossbeam_queue::ArrayQueue::new(CAPACITY);
+
+    let group = "ring, one thread: push then pop";
+    bench(group, "vas::sync::Ring", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = producer.push(i);
+                consumer.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "rtrb", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = rt_producer.push(i);
+                rt_consumer.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "heapless spsc", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = hl_producer.enqueue(i);
+                hl_consumer.dequeue().unwrap_or(0)
+            })
+            .sum()
+    });
+    bench(group, "crossbeam ArrayQueue", N, || {
+        (0..N as u64)
+            .map(|i| {
+                let _ = array.push(i);
+                array.pop().unwrap_or(0)
+            })
+            .sum()
+    });
+
+    let group = "ring, 1 producer thread + 1 consumer thread, 1024 slots";
+    bench(group, "vas::sync::Ring", N, || {
+        let (p, c) = (&mut producer, &mut consumer);
+        stream(N as u64, move |v| p.push(v).is_ok(), move || c.pop())
+    });
+    bench(group, "rtrb", N, || {
+        let (p, c) = (&mut rt_producer, &mut rt_consumer);
+        stream(N as u64, move |v| p.push(v).is_ok(), move || c.pop().ok())
+    });
+    bench(group, "heapless spsc", N, || {
+        let (p, c) = (&mut hl_producer, &mut hl_consumer);
+        stream(N as u64, move |v| p.enqueue(v).is_ok(), move || c.dequeue())
+    });
+    bench(group, "crossbeam ArrayQueue", N, || {
+        stream(N as u64, |v| array.push(v).is_ok(), || array.pop())
+    });
+}
+
 fn run() {
     println!("| Case | Implementation | ns / op | check |");
     println!("|---|---|---:|---:|");
@@ -747,6 +847,7 @@ fn run() {
     lru();
     queue();
     steal_deque();
+    ring();
 }
 
 fn main() {

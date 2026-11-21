@@ -245,6 +245,12 @@
 - [x] `done` is one `fetch_sub`, level with a bare one; a `done` too many undoes itself and never makes the counter read done early
 - [x] Results written without atomics are visible after `wait`: weakening either ordering is a data race under Miri
 
+## 0.44.0 — single-producer, single-consumer ring
+
+- [x] `vas::sync::Ring`: `Producer` / `Consumer` handles that borrow it, `Borrowed` (plain `T` slots) and `Inline`; wait-free
+- [x] Fastest of the four compared: 1.0 ns on one thread (`rtrb` 1.3, `heapless` 2.2), 2.5 ns between two threads
+- [x] Every ordering weakened in turn is a data race under Miri
+
 ## Quality
 
 - [x] Benchmarks against std (`make bench`, `docs/benchmarks.md`)

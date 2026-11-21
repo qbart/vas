@@ -22,5 +22,5 @@ struct Worker {
   `Copy`, `Default`, `PartialEq`, `Eq`, `Hash` and `Debug` when `T` has
   them, and `From<T>`.
 - Needs no atomics, so it is available on every target. vas's own
-  [`Queue`](queue.md) and [`StealDeque`](steal_deque.md) keep their two
-  indices in it.
+  [`Queue`](queue.md), [`StealDeque`](steal_deque.md) and
+  [`Ring`](ring.md) keep their two indices in it.
